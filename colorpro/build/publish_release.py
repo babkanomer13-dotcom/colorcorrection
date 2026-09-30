@@ -89,7 +89,15 @@ def main():
         for path in files + [args.artifacts / "SHA256SUMS.txt", args.notes]:
             print("Uploading", path.name, flush=True)
             gh("release", "upload", tag, str(path), "--repo", REPOSITORY)
-    remote = json.loads(gh("api", "repos/" + REPOSITORY + "/releases/tags/" + tag))
+    # Draft tags do not yet exist in Git and cannot be fetched via /tags/{tag}.
+    release_url = gh(
+        "release", "view", tag, "--repo", REPOSITORY, "--json", "apiUrl", "--jq", ".apiUrl"
+    ).strip()
+    if not re.fullmatch(
+        r"https://api\.github\.com/repos/" + re.escape(REPOSITORY) + r"/releases/\d+", release_url
+    ):
+        raise ValueError("Unexpected draft URL")
+    remote = json.loads(gh("api", release_url))
     if not remote["draft"]:
         raise ValueError("Refusing to modify an already published release")
     assets = {a["name"]: a for a in remote["assets"]}
@@ -101,9 +109,29 @@ def main():
         m = json.loads(
             (args.artifacts / (f"ColorPro-{__version__}-{platform}-update.json")).read_text("utf8")
         )
-        validate_manifest(m, assets, __version__, platform)
+        # GitHub assigns drafts an untagged-* URL. No client sees a draft.
+        # Check the future public URLs here, then check the real URLs after publish.
+        planned = {
+            name: dict(
+                a,
+                browser_download_url="https://github.com/"
+                + REPOSITORY
+                + "/releases/download/"
+                + tag
+                + "/"
+                + name,
+            )
+            for name, a in assets.items()
+        }
+        validate_manifest(m, planned, __version__, platform)
     gh("release", "edit", tag, "--repo", REPOSITORY, "--draft=false", "--latest")
-    print("Published", remote["html_url"])
+    published = json.loads(gh("api", "repos/" + REPOSITORY + "/releases/tags/" + tag))
+    for platform in ("win10", "win7"):
+        m = json.loads(
+            (args.artifacts / f"ColorPro-{__version__}-{platform}-update.json").read_text("utf8")
+        )
+        validate_manifest(m, {a["name"]: a for a in published["assets"]}, __version__, platform)
+    print("Published", published["html_url"])
 
 
 if __name__ == "__main__":
