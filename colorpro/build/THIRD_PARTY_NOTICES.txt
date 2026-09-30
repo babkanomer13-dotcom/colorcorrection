@@ -1,0 +1,30 @@
+ColorPro 1.0.0 / preserved V39
+
+This distribution includes inference-only raw V39 tensors from the preserved
+epoch-005 checkpoint. No training photographs, targets, annotations, optimiser
+state, external research datasets or local account credentials are included.
+The original checkpoint is kept intact; packaged raw tensors are compared exactly.
+No licence to third-party photographs is granted by this package.
+
+Components: Python (PSF), PyTorch (BSD-style), NumPy (BSD), Pillow (HPND/MIT-CMU),
+OpenCV (Apache-2.0), PySide/Shiboken/Qt (LGPLv3), PyInstaller bootloader
+(GPL with distribution exception), and their dependencies.
+Exact installed component licences accompany this program in third-party-licenses.
+YuNet face detector: OpenCV Zoo, MIT licence; no face identification is performed.
+https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+
+Qt/PySide is dynamically linked. Compatible modified libraries may be substituted;
+reverse engineering for debugging those library modifications is not prohibited.
+Corresponding Qt and PySide sources:
+https://download.qt.io/archive/qt/6.8/6.8.3/single/
+https://code.qt.io/cgit/pyside/pyside-setup.git/tag/?h=v6.8.3
+https://download.qt.io/archive/qt/5.15/5.15.2/single/
+https://code.qt.io/cgit/pyside/pyside-setup.git/tag/?h=v5.15.2.1
+
+Modern build includes NVIDIA CUDA runtime libraries distributed with PyTorch;
+their licence texts are included. The NVIDIA driver is not installed or modified.
+Legacy build includes Microsoft VC++ 2019 and Windows SDK downlevel UCRT
+redistributable DLLs. They are application-local, not copied into Windows folders.
+
+The program works offline: no telemetry, cloud uploads, scheduler or model downloads.
+Checksums detect accidental corruption; the installer is not digitally signed.
