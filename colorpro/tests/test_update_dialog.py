@@ -31,7 +31,7 @@ def test_check_is_background_and_does_not_install(app, tmp_path, monkeypatch):
     assert window.updates.text() == "Обновления  •"
     assert window.update_page.action.isEnabled()
     assert not window.update_page.isWindow()
-    assert window.pages.currentIndex() == 2
+    assert window.pages.currentIndex() == window.UPDATES
     window.update_page.auto.setChecked(False)
     assert not window.settings.value("auto_updates", type=bool)
     window.close()

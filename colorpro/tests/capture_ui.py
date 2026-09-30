@@ -39,12 +39,12 @@ def main():
         window.grab().save(str(args.output / f"{name}.png"))
     for size, suffix in [((1220, 820), ""), ((980, 640), "-small")]:
         window.resize(*size)
-        for page, name in ((1, "settings"), (2, "updates"), (3, "help")):
+        for page, name in ((1, "compare-empty"), (2, "settings"), (3, "updates"), (4, "help")):
             window.show_page(page)
             app.processEvents()
             window.grab().save(str(args.output / f"{name}{suffix}.png"))
     window.resize(1220, 820)
-    window.show_page(1)
+    window.show_page(window.SETTINGS)
     app.processEvents()
     for combo, name in ((window.device, "device-options"), (window.format, "format-options")):
         combo.showPopup()
@@ -67,6 +67,7 @@ def main():
         app.processEvents()
         time.sleep(0.02)
     assert window.compare.after is not None
+    window.open_comparison()
     for size, name in [((1220, 820), "result"), ((980, 640), "result-small")]:
         window.resize(*size)
         app.processEvents()
@@ -75,14 +76,10 @@ def main():
     window.preview_mode.setCurrentIndex(1)
     app.processEvents()
     window.grab().save(str(args.output / "divider.png"))
-    from colorpro.preview import CompareDialog
-
-    large = CompareDialog(window)
-    large.resize(1220, 820)
-    large.show()
+    window.toggle_review_fullscreen()
     app.processEvents()
-    large.grab().save(str(args.output / "large.png"))
-    large.close()
+    window.grab().save(str(args.output / "large.png"))
+    window.escape_page()
     qimage = icon().pixmap(256, 256).toImage()
     qimage.save(str(args.output / "colorpro-icon.png"))
     from PIL import Image

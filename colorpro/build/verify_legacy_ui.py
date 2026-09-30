@@ -17,7 +17,6 @@ def main():
     from PySide2.QtTest import QTest
     from PySide2.QtWidgets import QApplication
 
-    from colorpro.preview import CompareDialog
     from colorpro.ui import STYLE, Window
 
     output = Path(sys.argv[1]).resolve()
@@ -57,7 +56,7 @@ def main():
         assert predicate()
 
     assert window.device.currentData() == "auto" and window.device.count() == 2
-    window.show_page(1)
+    window.show_page(window.SETTINGS)
     app.processEvents()
     window.grab().save(str(output / "settings.png"))
     for combo in (window.device, window.format):
@@ -75,7 +74,7 @@ def main():
     pump(lambda: window.last_report is not None and not window.busy())
     pump(lambda: window.compare.after is not None)
     assert window.last_report["corrected"] == 1
-    for index in (1, 2, 3, 0):
+    for index in (1, 2, 3, 4, 0):
         window.show_page(index)
         app.processEvents()
         assert window.pages.currentIndex() == index and len(window.queue.items) == 1
@@ -83,11 +82,16 @@ def main():
     assert window.compare.mode == 1
     window.compare.set_zoom(2)
     assert window.compare.zoom == 2
-    dialog = CompareDialog(window)
-    dialog.show()
+    window.open_comparison()
     app.processEvents()
-    assert dialog.view.before is not None
-    dialog.close()
+    assert window.review.view.before is not None
+    assert window.review.count.text() == "1 / 1"
+    window.grab().save(str(output / "compare.png"))
+    window.toggle_review_fullscreen()
+    app.processEvents()
+    assert window.isFullScreen() and not window.navigation.isVisible()
+    window.escape_page()
+    assert not window.isFullScreen()
     result = Path(window.queue.results[0]["output"])
     window.remove_selected()
     assert not window.queue.items and result.is_file() and photo.is_file()

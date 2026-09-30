@@ -41,8 +41,6 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
-    QSplitter,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
@@ -52,7 +50,7 @@ from PySide6.QtWidgets import (
 from colorpro import __version__
 from colorpro.batch import Control, run_batch
 from colorpro.files import EXTENSIONS, collect_inputs
-from colorpro.preview import CompareDialog, CompareView, PreviewWorker
+from colorpro.preview import ComparePage, PreviewWorker
 from colorpro.widgets import combo_box, navigation_icon
 
 STATUS = {
@@ -290,42 +288,9 @@ class BatchWorker(QThread):
             self.failed.emit(str(error))
 
 
-class PreviewLabel(QLabel):
-    def __init__(self, text):
-        super().__init__(text)
-        self.setObjectName("preview")
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(120, 100)
-        self.setWordWrap(True)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.original = None
-
-    def reset(self, text):
-        self.original = None
-        self.clear()
-        self.setText(text)
-
-    def show_data(self, data):
-        self.original = QPixmap()
-        self.original.loadFromData(data, "PNG")
-        self.render_image()
-
-    def render_image(self):
-        if self.original is not None:
-            self.setPixmap(
-                self.original.scaled(
-                    self.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.render_image()
-
-
 class Window(QMainWindow):
+    PHOTOS, COMPARE, SETTINGS, UPDATES, HELP = range(5)
+
     def __init__(self, engine_factory=None, settings=None):
         super().__init__()
         self.setWindowTitle(f"ColorPro · {__version__}")
@@ -346,7 +311,8 @@ class Window(QMainWindow):
         self.preview_pending = None
         self.preview_key = None
         self.face_record_key = None
-        self.compare_dialog = None
+        self.review = None
+        self.review_was_maximized = False
         self.batch_preview = None
         shell = QWidget()
         outer = QHBoxLayout(shell)
@@ -354,6 +320,7 @@ class Window(QMainWindow):
         outer.setSpacing(0)
         self.pages = QStackedWidget()
         sidebar = QFrame()
+        self.navigation = sidebar
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(224)
         left = QVBoxLayout(sidebar)
@@ -365,12 +332,13 @@ class Window(QMainWindow):
         for index, (text, kind) in enumerate(
             (
                 ("Фотографии", "photos"),
+                ("До / после", "compare"),
                 ("Настройки", "settings"),
                 ("Обновления", "updates"),
                 ("Помощь", "help"),
             )
         ):
-            if index == 3:
+            if index == self.HELP:
                 left.addStretch()
                 self.nav_status = label("", "navStatus", True)
                 left.addWidget(self.nav_status)
@@ -382,7 +350,7 @@ class Window(QMainWindow):
             left.addWidget(nav)
             self.nav_buttons.append(nav)
         self.nav_buttons[0].setChecked(True)
-        self.updates = self.nav_buttons[2]
+        self.updates = self.nav_buttons[self.UPDATES]
         foot = label(f"ColorPro {__version__}")
         foot.setProperty("muted", True)
         foot.setContentsMargins(14, 12, 0, 0)
@@ -457,58 +425,14 @@ class Window(QMainWindow):
         stack_layout.addWidget(self.drop)
         stack_layout.addWidget(self.table)
 
-        preview_card = QFrame()
-        preview_card.setObjectName("card")
-        pv = QVBoxLayout(preview_card)
-        pv.setContentsMargins(14, 12, 14, 12)
-        pv.setSpacing(8)
-        preview_top = QHBoxLayout()
-        self.preview_title = label("До / после", "section")
-        preview_top.addWidget(self.preview_title)
-        preview_top.addStretch()
-        self.face_choice = combo_box()
-        self.face_choice.addItem("Весь кадр", None)
-        self.face_choice.setAccessibleName("Лицо для сравнения")
-        self.face_choice.setEnabled(False)
-        self.face_choice.currentIndexChanged.connect(self.selection_changed)
-        preview_top.addWidget(self.face_choice)
-        self.preview_mode = combo_box()
-        self.preview_mode.addItems(["Рядом", "Разделитель"])
-        self.preview_mode.setAccessibleName("Режим сравнения")
-        preview_top.addWidget(self.preview_mode)
-        self.expand = button("Крупно", self.open_comparison, "small")
-        self.expand.setEnabled(False)
-        preview_top.addWidget(self.expand)
-        self.open_photo = button("Открыть", self.open_selected, "small")
-        self.open_photo.setToolTip("Открыть результат в полном размере")
-        self.open_photo.setEnabled(False)
-        preview_top.addWidget(self.open_photo)
-        pv.addLayout(preview_top)
-        self.before, self.after = (
-            PreviewLabel("Исходник"),
-            PreviewLabel("Результат появится после обработки"),
-        )
-        self.compare = CompareView()
-        self.compare.expand_requested.connect(self.open_comparison)
-        self.preview_mode.currentIndexChanged.connect(self.compare.set_mode)
-        pv.addWidget(self.compare, 1)
-        self.preview_detail = label(
-            "",
-            "muted",
-            True,
-        )
-        self.preview_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        pv.addWidget(self.preview_detail)
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(self.stack)
-        splitter.addWidget(preview_card)
-        splitter.setSizes([160, 390])
-        splitter.setChildrenCollapsible(False)
-        main.addWidget(splitter, 1)
+        main.addWidget(self.stack, 1)
         review_row = QHBoxLayout()
         self.summary = label("", "muted")
         review_row.addWidget(self.summary)
         review_row.addStretch()
+        self.expand = button("Посмотреть до / после", self.open_comparison)
+        self.expand.setEnabled(False)
+        review_row.addWidget(self.expand)
         self.next_attention = button("Следующий на проверку", self.select_attention, "small")
         self.next_attention.setEnabled(False)
         self.next_attention.hide()
@@ -540,6 +464,13 @@ class Window(QMainWindow):
             controls.addWidget(widget)
         main.addLayout(controls)
         self.pages.addWidget(body)
+        self.review = ComparePage(self)
+        self.compare = self.review.view
+        self.face_choice = self.review.faces
+        self.preview_mode = self.review.mode
+        self.preview_detail = self.review.detail
+        self.open_photo = self.review.open_file
+        self.pages.addWidget(self.review)
         self.pages.addWidget(self.settings_page())
         from colorpro.update_dialog import UpdatePage
 
@@ -548,6 +479,13 @@ class Window(QMainWindow):
         self.pages.addWidget(self.help_page())
         outer.addWidget(self.pages, 1)
         self.setCentralWidget(shell)
+        self.sync_review()
+        QShortcut(QKeySequence("F11"), self).activated.connect(self.toggle_review_fullscreen)
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.escape_page)
+        for index in range(self.pages.count()):
+            QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self).activated.connect(
+                lambda i=index: self.show_page(i)
+            )
         for sequence, callback in (("Ctrl+O", self.pick_files), ("Delete", self.remove_selected)):
             shortcut = QShortcut(
                 QKeySequence(sequence), self.table if sequence == "Delete" else self
@@ -673,7 +611,7 @@ class Window(QMainWindow):
             (
                 "03",
                 "Сравните и сохраните",
-                "Выберите снимок в очереди и сравните до / после. "
+                "Откройте вкладку «До / после», чтобы сравнить фотографии. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
         ):
@@ -707,16 +645,22 @@ class Window(QMainWindow):
         return self.wrap_page(page)
 
     def show_page(self, index):
+        if self.isFullScreen() and index != self.COMPARE:
+            self.leave_review_fullscreen()
         self.pages.setCurrentIndex(index)
         self.nav_buttons[index].setChecked(True)
         self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
+        if index == self.COMPARE:
+            if self.queue.items and not self.table.selectionModel().selectedRows():
+                self.table.selectRow(0)
+            self.sync_review()
 
     def update_idle(self):
         if self.close_requested:
             self.close()
 
     def show_updates(self):
-        self.show_page(2)
+        self.show_page(self.UPDATES)
 
     def auto_check_updates(self):
         import sys
@@ -819,6 +763,7 @@ class Window(QMainWindow):
         )
         self.next_attention.setEnabled(bool(attention or errors))
         self.next_attention.setVisible(bool(attention or errors))
+        self.sync_review()
 
     def select_attention(self):
         rows = self.table.selectionModel().selectedRows()
@@ -830,6 +775,7 @@ class Window(QMainWindow):
         ]
         if candidates:
             self.table.selectRow(next((i for i in candidates if i > current), candidates[0]))
+            self.show_page(self.COMPARE)
 
     def remove_selected(self):
         if self.busy():
@@ -1036,6 +982,7 @@ class Window(QMainWindow):
             self.reset_preview()
             return
         item = self.queue.items[index]
+        self.sync_review()
         faces = [
             tuple(face["native_bbox"]) for face in record.get("faces", []) if "native_bbox" in face
         ]
@@ -1052,7 +999,6 @@ class Window(QMainWindow):
             self.face_choice.blockSignals(False)
         bbox = self.face_choice.currentData()
         bbox = tuple(bbox) if bbox is not None else None
-        self.preview_title.setText("До / после")
         reason = record.get("reason")
         detail = REASONS.get(reason, reason) or STATUS.get(record.get("status", "queued"), "")
         self.preview_detail.setText(f"{item.name} · {detail}")
@@ -1065,12 +1011,9 @@ class Window(QMainWindow):
             before, after = self.previews[key]
             self.show_preview(before, after)
         else:
-            self.before.reset("Загрузка исходника…")
-            self.after.reset("Результат появится после обработки")
             self.compare.clear("Загрузка исходника…")
             self.expand.setEnabled(False)
-            if self.compare_dialog:
-                self.compare_dialog.view.clear("Загрузка выбранного лица…")
+            self.sync_review()
             self.preview_pending = (key, item, record.get("output"), bbox)
             self.load_preview()
 
@@ -1085,12 +1028,10 @@ class Window(QMainWindow):
         self.expand.setEnabled(False)
         if self.preview_loader and self.preview_loader.isRunning():
             self.preview_loader.requestInterruption()
-        self.before.reset("Выберите фотографию")
-        self.after.reset("Результат появится после обработки")
         self.compare.clear()
-        self.preview_title.setText("До / после")
         self.preview_detail.setText("")
         self.open_photo.setEnabled(False)
+        self.sync_review()
 
     def load_preview(self):
         if self.preview_loader and self.preview_loader.isRunning():
@@ -1117,10 +1058,10 @@ class Window(QMainWindow):
             if not error:
                 self.cache_preview(key, (before, after))
         else:
-            self.before.reset("Не удалось открыть снимок")
             self.compare.clear("Не удалось открыть снимок")
         if error:
             self.preview_detail.setText(f"Предпросмотр: {error}")
+        self.sync_review()
 
     def cache_preview(self, key, pair):
         self.previews[key] = pair
@@ -1128,25 +1069,47 @@ class Window(QMainWindow):
             self.previews.pop(next(iter(self.previews)))
 
     def show_preview(self, before, after):
-        self.before.show_data(before)
-        if after:
-            self.after.show_data(after)
-        else:
-            self.after.reset("Результат появится после обработки")
         self.compare.show_pair(before, after)
         self.expand.setEnabled(True)
-        if self.compare_dialog:
-            self.compare_dialog.view.set_pixmaps(self.compare.before, self.compare.after)
-            self.compare_dialog.detail.setText(self.preview_detail.text())
+        self.sync_review()
+
+    def sync_review(self):
+        if self.review is not None:
+            self.review.sync_controls()
+
+    def select_photo(self, index):
+        if 0 <= index < len(self.queue.items):
+            selected = self.table.selectionModel().selectedRows()
+            if not selected or selected[0].row() != index:
+                self.table.selectRow(index)
+
+    def select_relative(self, delta):
+        selected = self.table.selectionModel().selectedRows()
+        self.select_photo((selected[0].row() if selected else -1) + delta)
 
     def open_comparison(self, *args):
-        if self.compare.before is None or self.compare_dialog is not None:
-            return
-        self.compare_dialog = CompareDialog(self)
-        self.compare_dialog.showMaximized()
-        self.compare_dialog.exec()
-        self.compare_dialog.deleteLater()
-        self.compare_dialog = None
+        self.show_page(self.COMPARE)
+
+    def toggle_review_fullscreen(self):
+        self.open_comparison()
+        if self.isFullScreen():
+            self.leave_review_fullscreen()
+        else:
+            self.review_was_maximized = self.isMaximized()
+            self.navigation.hide()
+            self.review.fullscreen.setText("Вернуться · Esc")
+            self.showFullScreen()
+
+    def leave_review_fullscreen(self):
+        self.navigation.show()
+        self.review.fullscreen.setText("На весь экран · F11")
+        self.showMaximized() if self.review_was_maximized else self.showNormal()
+
+    def escape_page(self):
+        if self.isFullScreen():
+            self.leave_review_fullscreen()
+        elif self.pages.currentIndex() != self.PHOTOS:
+            self.show_page(self.PHOTOS)
 
     def open_selected(self, *args):
         selected = self.table.selectionModel().selectedRows()
@@ -1202,6 +1165,8 @@ class Window(QMainWindow):
                 self.preview_loader.requestInterruption()
                 event.ignore()
                 return
+            if self.isFullScreen():
+                self.leave_review_fullscreen()
             self.settings.setValue("geometry", self.saveGeometry())
             event.accept()
 

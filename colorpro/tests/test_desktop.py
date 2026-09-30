@@ -214,7 +214,7 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
     )
     window.show()
     assert not hasattr(window, "model")
-    assert window.pages.count() == 4
+    assert window.pages.count() == 5
     assert window.device.currentData() == "auto" and window.device.count() == 3
     assert "100%" in window.format.itemText(1)
     assert not window.start.isEnabled()
@@ -227,7 +227,7 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
     pump(app, lambda: window.compare.after is not None)
     assert window.last_report["corrected"] == 1
     assert window.worker.args[2] == "v39"
-    for page in (1, 2, 3, 0):
+    for page in (1, 2, 3, 4, 0):
         QTest.mouseClick(window.nav_buttons[page], Qt.MouseButton.LeftButton)
         app.processEvents()
         assert window.pages.currentIndex() == page
@@ -255,7 +255,7 @@ def test_small_window_layout(app, tmp_path):
     app.processEvents()
     assert window.start.isVisible() and window.start.geometry().right() < window.width()
     assert not window.output.isVisible()
-    window.show_page(1)
+    window.show_page(window.SETTINGS)
     app.processEvents()
     assert window.output.isVisible()
     assert window.output.mapTo(window, window.output.rect().bottomRight()).x() < window.width()
@@ -266,7 +266,6 @@ def test_white_workspace_and_popup(app, tmp_path):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QWidget
 
-    from colorpro.preview import CompareDialog
     from colorpro.ui import Window
 
     settings = QSettings(str(tmp_path / "white.ini"), QSettings.Format.IniFormat)
@@ -278,7 +277,7 @@ def test_white_workspace_and_popup(app, tmp_path):
     body = window.findChild(QWidget, "body")
     assert body.grab().toImage().pixelColor(1, 1) == QColor("white")
     assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("white")
-    window.show_page(1)
+    window.show_page(window.SETTINGS)
     app.processEvents()
     for combo in (window.device, window.format):
         combo.showPopup()
@@ -288,12 +287,10 @@ def test_white_workspace_and_popup(app, tmp_path):
         assert palette.color(QPalette.ColorRole.Base) == QColor("white")
         assert palette.color(QPalette.ColorRole.HighlightedText) == QColor("white")
         combo.hidePopup()
-    dialog = CompareDialog(window)
-    dialog.show()
+    window.open_comparison()
     app.processEvents()
-    assert dialog.grab().toImage().pixelColor(1, 1) == QColor("white")
-    assert dialog.view.grab().toImage().pixelColor(10, 50) == QColor("white")
-    dialog.close()
+    assert window.review.grab().toImage().pixelColor(1, 1) == QColor("white")
+    assert window.review.view.grab().toImage().pixelColor(10, 50) == QColor("white")
     window.close()
 
 
@@ -303,7 +300,7 @@ def test_settings_persist_and_dropdown_keyboard(app, tmp_path):
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     window = Window(settings=settings)
     window.show()
-    window.show_page(1)
+    window.show_page(window.SETTINGS)
     window.device.setFocus()
     QTest.keyClick(window.device, Qt.Key.Key_End)
     assert window.device.currentData() == "cpu"
@@ -343,7 +340,7 @@ def test_processing_survives_navigation(app, photo, tmp_path):
     window.start_batch()
     try:
         pump(app, entered.is_set)
-        for index in (1, 2, 3, 0):
+        for index in (1, 2, 3, 4, 0):
             QTest.mouseClick(window.nav_buttons[index], Qt.MouseButton.LeftButton)
             assert window.pages.currentIndex() == index
             assert window.busy() and not window.device.isEnabled()
@@ -352,6 +349,92 @@ def test_processing_survives_navigation(app, photo, tmp_path):
         release.set()
         pump(app, lambda: not window.busy() and window.last_report is not None)
     assert window.last_report["corrected"] == 1
+    window.close()
+    pump(app, lambda: not window.isVisible())
+
+
+def test_review_page_selection_and_fullscreen(app, photo, tmp_path):
+    from colorpro.ui import Window
+
+    second = tmp_path / "second.png"
+    Image.new("RGB", (100, 80), (40, 120, 210)).save(second)
+    window = Window(
+        engine_factory=FakeEngine,
+        settings=QSettings(str(tmp_path / "review.ini"), QSettings.Format.IniFormat),
+    )
+    window.resize(980, 640)
+    window.show()
+    window.open_comparison()
+    assert not window.review.isWindow()
+    assert window.review.count.text() == "0 / 0"
+    assert not window.review.next.isEnabled()
+    assert not window.review.photos.isEnabled()
+    window.import_files([str(photo[0]), str(second)])
+    pump(app, lambda: len(window.queue.items) == 2 and not window.busy())
+    window.open_comparison()
+    pump(app, lambda: window.compare.before is not None)
+    assert window.pages.currentIndex() == window.COMPARE
+    assert not window.table.isVisible() and window.compare.isVisible()
+    assert window.width() == 980
+    assert window.compare.height() >= 350
+    assert window.review.count.text() == "1 / 2"
+    QTest.mouseClick(window.review.next, Qt.MouseButton.LeftButton)
+    pump(
+        app,
+        lambda: (
+            window.compare.before is not None
+            and window.preview_pending is None
+            and not window.preview_loader.isRunning()
+        ),
+    )
+    assert window.review.photos.currentIndex() == 1
+    assert window.table.selectionModel().selectedRows()[0].row() == 1
+    assert window.review.count.text() == "2 / 2" and not window.review.next.isEnabled()
+    window.review.photos.setCurrentIndex(0)
+    window.review.photos.activated.emit(0)
+    pump(app, lambda: window.compare.before is not None and not window.preview_loader.isRunning())
+    assert window.table.selectionModel().selectedRows()[0].row() == 0
+    window.compare.set_zoom(2)
+    window.show_page(window.PHOTOS)
+    window.open_comparison()
+    assert window.compare.zoom == 2
+    window.toggle_review_fullscreen()
+    app.processEvents()
+    assert window.isFullScreen() and not window.navigation.isVisible()
+    window.escape_page()
+    app.processEvents()
+    assert not window.isFullScreen() and window.navigation.isVisible()
+    assert window.pages.currentIndex() == window.COMPARE
+    window.toggle_review_fullscreen()
+    window.show_page(window.SETTINGS)
+    app.processEvents()
+    assert not window.isFullScreen() and window.navigation.isVisible()
+    window.clear_queue()
+    window.open_comparison()
+    assert window.review.count.text() == "0 / 0"
+    assert window.compare.before is None and window.compare.after is None
+    window.close()
+    pump(app, lambda: not window.isVisible())
+
+
+def test_review_attention_and_queue_reindex(app, photo, tmp_path):
+    from colorpro.ui import Window
+
+    second = tmp_path / "second.png"
+    Image.new("RGB", (100, 80)).save(second)
+    window = Window(settings=QSettings(str(tmp_path / "reindex.ini"), QSettings.Format.IniFormat))
+    window.show()
+    window.import_files([str(photo[0]), str(second)])
+    pump(app, lambda: len(window.queue.items) == 2 and not window.busy())
+    window.queue.update(1, {"status": "needs_attention"})
+    window.update_summary()
+    window.select_attention()
+    assert window.pages.currentIndex() == window.COMPARE
+    assert window.review.photos.currentIndex() == 1
+    window.remove_selected()
+    assert len(window.queue.items) == 1 and window.review.count.text() == "1 / 1"
+    assert window.review.photos.currentIndex() == 0
+    assert not window.review.attention.isVisible()
     window.close()
     pump(app, lambda: not window.isVisible())
 

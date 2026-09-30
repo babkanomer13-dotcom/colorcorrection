@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt, QThread, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -15,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from colorpro.files import collect_inputs, preview_bytes, read_image
-from colorpro.widgets import combo_box
+from colorpro.widgets import combo_box, navigation_icon
 
 
 def face_region(shape, bbox):
@@ -252,52 +251,121 @@ class CompareView(QWidget):
             return super().keyPressEvent(event)
 
 
-class CompareDialog(QDialog):
-    """The photograph fills the window, with a single set of controls for both sides."""
+class ComparePage(QWidget):
+    """One persistent review surface, synchronized with the processing queue."""
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setWindowTitle("ColorPro · До и после")
-        self.setMinimumSize(760, 520)
-        self.setStyleSheet(
-            "QDialog { background: white; } QLabel { color: #444444; }"
-            "QPushButton, QComboBox { background: white; color: #303030; "
-            "border: 1px solid #dedede; padding: 8px 12px; border-radius: 6px; }"
-            "QComboBox { padding-right: 39px; }"
-        )
+    def __init__(self, owner):
+        super().__init__()
+        self.owner = owner
+        self.setObjectName("page")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 12)
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(QLabel("Сравнение до / после"))
-        toolbar.addStretch()
-        faces = combo_box()
-        for index in range(parent.face_choice.count()):
-            faces.addItem(parent.face_choice.itemText(index))
-        faces.setCurrentIndex(parent.face_choice.currentIndex())
-        faces.setEnabled(parent.face_choice.count() > 1)
-        faces.currentIndexChanged.connect(parent.face_choice.setCurrentIndex)
-        toolbar.addWidget(faces)
+        layout.setContentsMargins(24, 22, 24, 18)
+        layout.setSpacing(12)
+        heading = QHBoxLayout()
+        title = QLabel("До / после")
+        title.setObjectName("pageTitle")
+        heading.addWidget(title)
+        heading.addStretch()
+        self.attention = QPushButton("Следующий на проверку")
+        self.attention.clicked.connect(owner.select_attention)
+        heading.addWidget(self.attention)
+        self.open_file = QPushButton("Открыть результат")
+        self.open_file.setEnabled(False)
+        self.open_file.clicked.connect(owner.open_selected)
+        heading.addWidget(self.open_file)
+        layout.addLayout(heading)
+        selection = QHBoxLayout()
+        self.previous = QPushButton()
+        self.previous.setIcon(navigation_icon("previous"))
+        self.previous.setIconSize(QSize(18, 18))
+        self.previous.setAccessibleName("Предыдущая фотография")
+        self.previous.setToolTip("Предыдущая фотография")
+        self.previous.clicked.connect(lambda: owner.select_relative(-1))
+        selection.addWidget(self.previous)
+        self.photos = combo_box()
+        self.photos.setAccessibleName("Фотография для сравнения")
+        self.photos.setMinimumContentsLength(10)
+        self.photos.setSizeAdjustPolicy(
+            self.photos.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.photos.setModel(owner.queue)
+        self.photos.setModelColumn(1)
+        self.photos.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.photos.activated.connect(owner.select_photo)
+        selection.addWidget(self.photos, 1)
+        self.next = QPushButton()
+        self.next.setIcon(navigation_icon("next"))
+        self.next.setIconSize(QSize(18, 18))
+        self.next.setAccessibleName("Следующая фотография")
+        self.next.setToolTip("Следующая фотография")
+        self.next.clicked.connect(lambda: owner.select_relative(1))
+        selection.addWidget(self.next)
+        self.count = QLabel("0 / 0")
+        self.count.setObjectName("muted")
+        self.count.setMinimumWidth(60)
+        selection.addWidget(self.count)
+        self.faces = combo_box()
+        self.faces.setAccessibleName("Лицо для сравнения")
+        self.faces.addItem("Весь кадр", None)
+        self.faces.setEnabled(False)
+        self.faces.currentIndexChanged.connect(owner.selection_changed)
+        selection.addWidget(self.faces)
+        self.mode = combo_box()
+        self.mode.addItems(["Рядом", "Разделитель"])
+        self.mode.setAccessibleName("Режим сравнения")
+        selection.addWidget(self.mode)
+        layout.addLayout(selection)
         self.view = CompareView()
-        self.view.set_pixmaps(parent.compare.before, parent.compare.after)
-        self.zoom_label = QLabel("1×")
+        self.mode.currentIndexChanged.connect(self.view.set_mode)
+        self.view.setAccessibleName("До и после, одинаковый масштаб")
+        self.view.expand_requested.connect(owner.toggle_review_fullscreen)
+        self.zoom_label = QLabel("1.0×")
         self.view.zoom_changed.connect(lambda value: self.zoom_label.setText(f"{value:.1f}×"))
+        layout.addWidget(self.view, 1)
+        self.detail = QLabel("")
+        self.detail.setObjectName("muted")
+        self.detail.setTextFormat(Qt.TextFormat.PlainText)
+        self.detail.setWordWrap(True)
+        self.detail.setMaximumHeight(40)
+        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self.detail)
+        toolbar = QHBoxLayout()
+        hint = QLabel("Колесо мыши — масштаб")
+        hint.setObjectName("muted")
+        toolbar.addWidget(hint)
+        toolbar.addStretch()
+        toolbar.addWidget(self.zoom_label)
+        self.zoom_controls = []
         for title, callback in (
             ("−", lambda: self.view.set_zoom(self.view.zoom / 1.2)),
             ("+", lambda: self.view.set_zoom(self.view.zoom * 1.2)),
             ("По размеру", self.view.reset_zoom),
-            ("Закрыть · Esc", self.reject),
         ):
             control = QPushButton(title)
             control.clicked.connect(callback)
             toolbar.addWidget(control)
-        toolbar.insertWidget(3, self.zoom_label)
+            self.zoom_controls.append(control)
+        self.fullscreen = QPushButton("На весь экран · F11")
+        self.fullscreen.clicked.connect(owner.toggle_review_fullscreen)
+        toolbar.addWidget(self.fullscreen)
         layout.addLayout(toolbar)
-        layout.addWidget(self.view, 1)
-        self.detail = QLabel(parent.preview_detail.text())
-        self.detail.setWordWrap(True)
-        layout.addWidget(self.detail)
-        layout.addWidget(
-            QLabel(
-                "Колесо — приблизить · потяните любое изображение — оба вида переместятся вместе"
-            )
-        )
+        for control in self.findChildren(QPushButton):
+            control.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def sync_controls(self):
+        owner = self.owner
+        selected = owner.table.selectionModel().selectedRows()
+        index = selected[0].row() if selected else -1
+        total = len(owner.queue.items)
+        self.photos.blockSignals(True)
+        self.photos.setCurrentIndex(index)
+        self.photos.blockSignals(False)
+        self.photos.setEnabled(bool(total))
+        self.photos.setToolTip(owner.queue.items[index].label if index >= 0 else "")
+        self.previous.setEnabled(index > 0)
+        self.next.setEnabled(0 <= index < total - 1)
+        self.count.setText(f"{index + 1} / {total}")
+        self.attention.setVisible(owner.next_attention.isEnabled())
+        for control in self.zoom_controls:
+            control.setEnabled(self.view.before is not None)

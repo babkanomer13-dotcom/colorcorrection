@@ -99,7 +99,16 @@ def navigation_icon(kind):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(color), 1.6))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        if kind == "photos":
+        if kind in {"previous", "next"}:
+            painter.setPen(QPen(QColor("#706570"), 1.8))
+            x0, x1 = (13, 8) if kind == "previous" else (8, 13)
+            painter.drawPolyline(QPolygonF([QPointF(x0, 5), QPointF(x1, 11), QPointF(x0, 17)]))
+        elif kind == "compare":
+            painter.drawRoundedRect(QRectF(3, 3, 16, 16), 3, 3)
+            painter.drawLine(QPointF(11, 3), QPointF(11, 19))
+            painter.drawLine(QPointF(5, 16), QPointF(8, 12))
+            painter.drawLine(QPointF(14, 12), QPointF(17, 16))
+        elif kind == "photos":
             painter.drawRoundedRect(QRectF(3, 3, 16, 16), 3, 3)
             painter.drawEllipse(QPointF(8, 8), 1.3, 1.3)
             painter.drawPolyline(
