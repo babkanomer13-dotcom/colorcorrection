@@ -213,7 +213,8 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
         settings=QSettings(str(tmp_path / "ui.ini"), QSettings.Format.IniFormat),
     )
     window.show()
-    assert window.model.currentData() == "v39" and window.model.count() == 1
+    assert not hasattr(window, "model")
+    assert window.pages.count() == 4
     assert window.device.currentData() == "auto" and window.device.count() == 3
     assert "100%" in window.format.itemText(1)
     assert not window.start.isEnabled()
@@ -225,6 +226,12 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
     pump(app, lambda: window.last_report is not None and not window.busy())
     pump(app, lambda: window.compare.after is not None)
     assert window.last_report["corrected"] == 1
+    assert window.worker.args[2] == "v39"
+    for page in (1, 2, 3, 0):
+        QTest.mouseClick(window.nav_buttons[page], Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert window.pages.currentIndex() == page
+        assert len(window.queue.items) == 1 and window.compare.after is not None
     assert window.open_folder.isEnabled() and window.expand.isEnabled()
     window.preview_mode.setCurrentIndex(1)
     assert window.compare.mode == 1
@@ -247,7 +254,11 @@ def test_small_window_layout(app, tmp_path):
     window.show()
     app.processEvents()
     assert window.start.isVisible() and window.start.geometry().right() < window.width()
+    assert not window.output.isVisible()
+    window.show_page(1)
+    app.processEvents()
     assert window.output.isVisible()
+    assert window.output.mapTo(window, window.output.rect().bottomRight()).x() < window.width()
     window.close()
 
 
@@ -267,6 +278,8 @@ def test_white_workspace_and_popup(app, tmp_path):
     body = window.findChild(QWidget, "body")
     assert body.grab().toImage().pixelColor(1, 1) == QColor("white")
     assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("white")
+    window.show_page(1)
+    app.processEvents()
     for combo in (window.device, window.format):
         combo.showPopup()
         app.processEvents()
@@ -282,6 +295,65 @@ def test_white_workspace_and_popup(app, tmp_path):
     assert dialog.view.grab().toImage().pixelColor(10, 50) == QColor("white")
     dialog.close()
     window.close()
+
+
+def test_settings_persist_and_dropdown_keyboard(app, tmp_path):
+    from colorpro.ui import Window
+
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    window = Window(settings=settings)
+    window.show()
+    window.show_page(1)
+    window.device.setFocus()
+    QTest.keyClick(window.device, Qt.Key.Key_End)
+    assert window.device.currentData() == "cpu"
+    assert settings.value("device_mode") == "cpu"
+    window.format.setCurrentIndex(1)
+    assert settings.value("format") == "JPEG"
+    window.output.setText(str(tmp_path / "new-output"))
+    window.output.editingFinished.emit()
+    window.close()
+    reopened = Window(settings=settings)
+    assert reopened.device.currentData() == "cpu"
+    assert reopened.format.currentData() == "JPEG"
+    assert reopened.output.text() == str(tmp_path / "new-output")
+    reopened.close()
+
+
+def test_processing_survives_navigation(app, photo, tmp_path):
+    from colorpro.ui import Window
+
+    release = threading.Event()
+    entered = threading.Event()
+
+    class WaitingEngine(FakeEngine):
+        def process(self, pixels):
+            entered.set()
+            assert release.wait(5)
+            return super().process(pixels)
+
+    window = Window(
+        engine_factory=WaitingEngine,
+        settings=QSettings(str(tmp_path / "nav.ini"), QSettings.Format.IniFormat),
+    )
+    window.show()
+    window.output.setText(str(tmp_path / "processed"))
+    window.import_files([str(photo[0])])
+    pump(app, lambda: len(window.queue.items) == 1 and not window.busy())
+    window.start_batch()
+    try:
+        pump(app, entered.is_set)
+        for index in (1, 2, 3, 0):
+            QTest.mouseClick(window.nav_buttons[index], Qt.MouseButton.LeftButton)
+            assert window.pages.currentIndex() == index
+            assert window.busy() and not window.device.isEnabled()
+            assert len(window.queue.items) == 1
+    finally:
+        release.set()
+        pump(app, lambda: not window.busy() and window.last_report is not None)
+    assert window.last_report["corrected"] == 1
+    window.close()
+    pump(app, lambda: not window.isVisible())
 
 
 def test_kernel_lock_release(tmp_path):

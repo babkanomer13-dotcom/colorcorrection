@@ -70,13 +70,17 @@ def main():
                     'QSettings("ColorPro", "Desktop")', 'QSettings("ColorProWin7", "Desktop")'
                 )
                 text = text.replace(
-                    'self.device.addItem("Видеокарта · NVIDIA CUDA", "cuda")',
+                    'self.device.addItem("Видеокарта NVIDIA", "cuda")',
                     "# Legacy build has CPU-only PyTorch.",
                 )
-                text = text.replace('"Автоматически · GPU / CPU"', '"Автоматически · CPU"')
+                text = text.replace('"Автоматически", "auto"', '"Автоматически · CPU", "auto"')
                 text = text.replace(
-                    '"AMD / Intel пока работают через CPU. Обучение здесь не запускается."',
-                    '"Сборка Windows 7 работает на CPU. Обучение здесь не запускается."',
+                    '"Автовыбор NVIDIA или процессора. AMD и Intel — через процессор."',
+                    '"Сборка Windows 7 работает на процессоре."',
+                )
+                text = text.replace(
+                    "В автоматическом режиме ColorPro сам выберет доступное устройство.",
+                    "В этой сборке фотографии обрабатываются на процессоре.",
                 )
         out = stage / "colorpro" / name
         out.parent.mkdir(parents=True, exist_ok=True)

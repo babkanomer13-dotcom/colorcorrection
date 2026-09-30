@@ -166,7 +166,7 @@ class CompareView(QWidget):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.fillRect(self.rect(), QColor("#ffffff"))
         panes = self.panes()
-        captions = ["ДО  ·  Исходник", "ПОСЛЕ  ·  V39"]
+        captions = ["Исходник", "Результат"]
         for index in range(2):
             header = QRectF(index * self.width() / 2, 0, self.width() / 2, 34)
             painter.fillRect(header, QColor("#ffffff"))
@@ -263,6 +263,7 @@ class CompareDialog(QDialog):
             "QDialog { background: white; } QLabel { color: #444444; }"
             "QPushButton, QComboBox { background: white; color: #303030; "
             "border: 1px solid #dedede; padding: 8px 12px; border-radius: 6px; }"
+            "QComboBox { padding-right: 39px; }"
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 12)

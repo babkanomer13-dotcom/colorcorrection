@@ -37,11 +37,21 @@ def main():
         window.resize(*size)
         app.processEvents()
         window.grab().save(str(args.output / f"{name}.png"))
+    for size, suffix in [((1220, 820), ""), ((980, 640), "-small")]:
+        window.resize(*size)
+        for page, name in ((1, "settings"), (2, "updates"), (3, "help")):
+            window.show_page(page)
+            app.processEvents()
+            window.grab().save(str(args.output / f"{name}{suffix}.png"))
+    window.resize(1220, 820)
+    window.show_page(1)
+    app.processEvents()
     for combo, name in ((window.device, "device-options"), (window.format, "format-options")):
         combo.showPopup()
         app.processEvents()
         combo.view().window().grab().save(str(args.output / f"{name}.png"))
         combo.hidePopup()
+    window.show_page(0)
     report = json.loads(args.report.read_text(encoding="utf8"))
     items, errors = collect_inputs([r["input"]["path"] for r in report["records"]])
     assert not errors

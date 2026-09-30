@@ -9,6 +9,7 @@ from PySide6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
     QSettings,
+    QSize,
     Qt,
     QThread,
     QTimer,
@@ -42,6 +43,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -51,7 +53,7 @@ from colorpro import __version__
 from colorpro.batch import Control, run_batch
 from colorpro.files import EXTENSIONS, collect_inputs
 from colorpro.preview import CompareDialog, CompareView, PreviewWorker
-from colorpro.widgets import combo_box
+from colorpro.widgets import combo_box, navigation_icon
 
 STATUS = {
     "queued": "В очереди",
@@ -72,27 +74,28 @@ REASONS = {
 
 STYLE = """
 QWidget { font-family: 'Segoe UI'; font-size: 13px; color: #303030; }
-QMainWindow, #body { background: #ffffff; }
-#sidebar { background: #271d29; border: 0; }
+QMainWindow, #body, #page, QStackedWidget { background: #ffffff; }
+#sidebar { background: #251d29; border: 0; }
 #sidebar QLabel { color: #fff5fb; background: transparent; }
 #sidebar QLabel[muted='true'] { color: #c9b5c7; }
-#brand { font-size: 25px; font-weight: 700; letter-spacing: -1px; }
-#sidebar QComboBox, #sidebar QLineEdit { background: #392b3a; color: #fff5fb;
-    border: 1px solid #594050; border-radius: 7px; padding: 10px; min-height: 19px; }
-#sidebar QPushButton { background: #423044; color: #fff5fb; border: 1px solid #65475c; }
-QComboBox QAbstractItemView, #sidebar QComboBox QAbstractItemView {
-    background: #ffffff; color: #242424; border: 1px solid #bdbdbd;
-    selection-background-color: #d83387; selection-color: #ffffff;
-    outline: 0; }
-QComboBox QAbstractItemView::item, #sidebar QComboBox QAbstractItemView::item {
-    background: #ffffff; color: #242424; min-height: 28px; padding: 5px 8px; }
-QComboBox QAbstractItemView::item:selected, #sidebar QComboBox QAbstractItemView::item:selected {
-    background: #d83387; color: #ffffff; }
-QComboBox::drop-down { border: 0; width: 23px; }
-QComboBox { background: #ffffff; border: 1px solid #dedede; border-radius: 6px;
-    padding: 5px 8px; min-height: 20px; }
+#brand { font-size: 26px; font-weight: 700; letter-spacing: -1px; }
+#sidebar QPushButton#nav { text-align: left; padding: 13px 14px; border: 0;
+    border-radius: 10px; background: transparent; color: #cfc3ce; font-size: 14px; }
+#sidebar QPushButton#nav:hover { background: #352938; color: white; }
+#sidebar QPushButton#nav:checked { background: #513048; color: #ffc5e1; }
+#sidebar QPushButton#nav:focus { border: 1px solid #e48bb8; }
+#sidebar QLabel#navStatus { color: #eaa4c7; padding: 8px 4px; font-size: 12px; }
+QComboBox::drop-down { border: 0; width: 34px; }
+QComboBox::down-arrow { image: none; width: 0; height: 0; }
+QComboBox { background: #ffffff; border: 1px solid #dcd6dc; border-radius: 9px;
+    padding: 5px 39px 5px 12px; min-height: 22px; }
+QComboBox:hover { border-color: #b998ac; background: #fdfbfd; }
+QComboBox:on, QComboBox:focus { border-color: #d83387; }
+QComboBox:disabled { color: #aaa4aa; border-color: #ece9ec; }
+QLineEdit { background: white; border: 1px solid #dcd6dc; border-radius: 9px;
+    padding: 11px 12px; selection-background-color: #d83387; }
 QPushButton:focus, QComboBox:focus, QLineEdit:focus { border: 2px solid #ed73ae; }
-QScrollArea { border: 0; background: #271d29; }
+QScrollArea { border: 0; background: white; }
 QSplitter::handle { background: transparent; height: 9px; }
 QPushButton { background: white; border: 1px solid #dedede; border-radius: 8px;
     padding: 9px 14px; font-weight: 600; min-height: 19px; }
@@ -105,8 +108,14 @@ QPushButton#primary:hover { background: #b9216e; }
 QPushButton#primary:disabled { background: #e7bad0; color: #fff4f9; }
 QPushButton#small { padding: 5px 10px; min-height: 15px; }
 QLabel#title { font-size: 25px; font-weight: 700; }
+QLabel#pageTitle { font-size: 30px; font-weight: 700; color: #28232b; }
+QLabel#eyebrow { font-size: 11px; font-weight: 600; color: #a68195; letter-spacing: 2px; }
 QLabel#section { font-size: 16px; font-weight: 600; }
 QLabel#muted { color: #737373; }
+QLabel#stepNumber { color: #c42b78; background: #fcecf4; border-radius: 12px;
+    font-size: 16px; font-weight: 600; padding: 10px; }
+QCheckBox { spacing: 10px; padding: 8px 0; }
+QCheckBox::indicator { width: 18px; height: 18px; }
 QLabel#badge { color: #187044; background: white; padding: 6px 10px; border-radius: 6px; }
 QFrame#card { background: white; border: 1px solid #e4e4e4; border-radius: 12px; }
 QFrame#drop { background: white; border: 2px dashed #d5d5d5; border-radius: 12px; }
@@ -329,6 +338,7 @@ class Window(QMainWindow):
         self.worker = self.importer = None
         self.output_folder = None
         self.close_requested = False
+        self.install_pending = False
         self.last_report = None
         self.queue = QueueModel()
         self.previews = {}  # Last eight previews only; large queues cannot exhaust RAM.
@@ -342,78 +352,42 @@ class Window(QMainWindow):
         outer = QHBoxLayout(shell)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        self.pages = QStackedWidget()
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(224)
         left = QVBoxLayout(sidebar)
-        left.setContentsMargins(20, 22, 20, 18)
-        left.setSpacing(10)
+        left.setContentsMargins(16, 30, 16, 22)
+        left.setSpacing(8)
         left.addWidget(label("ColorPro", "brand"))
-        subtitle = label("СТУДИЯ ЦВЕТОКОРРЕКЦИИ")
-        subtitle.setProperty("muted", True)
-        subtitle.setStyleSheet("font-size: 10px; letter-spacing: 1px;")
-        left.addWidget(subtitle)
-        left.addSpacing(18)
-        left.addWidget(label("01    Модель"))
-        self.model = combo_box()
-        self.model.addItem("V39 · сохранённая версия", "v39")
-        left.addWidget(self.model)
-        self.model_hint = label("", wrap=True)
-        self.model_hint.setProperty("muted", True)
-        self.model_hint.setMinimumHeight(66)
-        left.addWidget(self.model_hint)
-        self.model.currentIndexChanged.connect(self.model_changed)
-        self.model_changed()
-        left.addSpacing(14)
-        left.addWidget(label("02    Обработка"))
-        self.device = combo_box()
-        self.device.addItem("Автоматически · GPU / CPU", "auto")
-        self.device.addItem("Видеокарта · NVIDIA CUDA", "cuda")
-        self.device.addItem("Процессор · CPU", "cpu")
-        self.device.setToolTip(
-            "Автоматически: доступная совместимая NVIDIA, иначе CPU.\n"
-            "При нескольких видеокартах выбирается доступная с большим запасом памяти.\n"
-            "AMD / Intel пока работают через CPU. Обучение здесь не запускается."
-        )
-        left.addWidget(self.device)
-        self.format = combo_box()
-        self.format.addItem("PNG · без потерь", "PNG")
-        self.format.addItem("JPEG · качество 100%", "JPEG")
-        self.format.setToolTip(
-            "PNG сохраняет результат без потерь. JPEG: качество 100%, цвет 4:4:4.\n"
-            "JPEG остаётся форматом с потерями даже при качестве 100%.\n"
-            "ICC преобразуется в sRGB. RAW и 16-битные файлы пока не поддерживаются."
-        )
-        left.addWidget(self.format)
-        left.addSpacing(14)
-        left.addWidget(label("03    Сохранение"))
-        self.output = QLineEdit(
-            str(self.settings.value("output", str(Path.home() / "Pictures" / "ColorPro")))
-        )
-        self.output.setToolTip("Внутри будет создана отдельная папка для каждой пачки")
-        self.output.setAccessibleName("Папка результатов")
-        left.addWidget(self.output)
-        self.choose_output = button("Выбрать папку…", self.pick_output)
-        left.addWidget(self.choose_output)
-        hint = label(
-            "Исходники остаются нетронутыми.\nКаждая пачка — в отдельной папке.", wrap=True
-        )
-        hint.setProperty("muted", True)
-        left.addWidget(hint)
-        left.addStretch()
-        self.updates = button("Обновления", self.show_updates)
-        left.addWidget(self.updates)
-        left.addWidget(button("О модели V39", self.show_model_info))
-        self.about = button("О ColorPro", self.show_about)
-        left.addWidget(self.about)
-        foot = label(f"v{__version__}  /  без загрузки в облако", wrap=True)
+        left.addSpacing(32)
+        self.nav_buttons = []
+        for index, (text, kind) in enumerate(
+            (
+                ("Фотографии", "photos"),
+                ("Настройки", "settings"),
+                ("Обновления", "updates"),
+                ("Помощь", "help"),
+            )
+        ):
+            if index == 3:
+                left.addStretch()
+                self.nav_status = label("", "navStatus", True)
+                left.addWidget(self.nav_status)
+            nav = button(text, lambda checked=False, i=index: self.show_page(i), "nav")
+            nav.setCheckable(True)
+            nav.setAutoExclusive(True)
+            nav.setIcon(navigation_icon(kind))
+            nav.setIconSize(QSize(22, 22))
+            left.addWidget(nav)
+            self.nav_buttons.append(nav)
+        self.nav_buttons[0].setChecked(True)
+        self.updates = self.nav_buttons[2]
+        foot = label(f"ColorPro {__version__}")
         foot.setProperty("muted", True)
+        foot.setContentsMargins(14, 12, 0, 0)
         left.addWidget(foot)
-        sidebar_scroll = QScrollArea()
-        sidebar_scroll.setWidgetResizable(True)
-        sidebar_scroll.setFixedWidth(264)
-        sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        sidebar_scroll.setWidget(sidebar)
-        outer.addWidget(sidebar_scroll)
+        outer.addWidget(sidebar)
 
         body = QWidget()
         body.setObjectName("body")
@@ -423,21 +397,20 @@ class Window(QMainWindow):
         headline = QHBoxLayout()
         titles = QVBoxLayout()
         titles.setSpacing(5)
-        titles.addWidget(label("Цвет всей серии", "title"))
-        titles.addWidget(label("Ваша V39. Цвет и тон — без ретуши и изменения деталей.", "muted"))
+        titles.addWidget(label("Фотографии", "pageTitle"))
         headline.addLayout(titles)
         headline.addStretch()
-        headline.addWidget(label("●  На вашем ПК", "badge"), 0, Qt.AlignmentFlag.AlignTop)
         main.addLayout(headline)
 
         toolbar = QHBoxLayout()
-        self.queue_title = label("Фотографии · 0", "section")
+        self.queue_title = label("Очередь пуста", "muted")
         toolbar.addWidget(self.queue_title)
         toolbar.addStretch()
         self.remove = button("Убрать", self.remove_selected, "small")
         self.remove.setToolTip("Убрать выбранные из очереди · Delete. Файлы останутся на диске.")
         self.clear = button("Очистить", self.clear_queue, "small")
-        self.add = button("+ Добавить фото / ZIP", self.pick_files)
+        self.add = button("+ Добавить", self.pick_files)
+        self.add.setToolTip("Добавить фотографии или ZIP · Ctrl+O")
         toolbar.addWidget(self.remove)
         toolbar.addWidget(self.clear)
         toolbar.addWidget(self.add)
@@ -450,9 +423,8 @@ class Window(QMainWindow):
         drop_layout.setSpacing(8)
         drop_layout.addStretch()
         for text, name in [
-            ("Перетащите фотографии или ZIP сюда", "section"),
-            ("JPEG, PNG, TIFF, WebP, BMP · 8-битный RGB", "muted"),
-            ("Полный размер · исходники остаются нетронутыми", "muted"),
+            ("Здесь начинается новая серия", "section"),
+            ("Перетащите фотографии или ZIP в это окно", "muted"),
         ]:
             item = label(text, name, True)
             item.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -467,6 +439,8 @@ class Window(QMainWindow):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
+        self.table.hideColumn(2)
+        self.table.hideColumn(4)
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -477,7 +451,7 @@ class Window(QMainWindow):
         self.table.doubleClicked.connect(self.open_comparison)
         self.table.hide()
         self.stack = QFrame()
-        self.stack.setObjectName("card")
+        self.stack.setObjectName("queueCard")
         stack_layout = QVBoxLayout(self.stack)
         stack_layout.setContentsMargins(1, 1, 1, 1)
         stack_layout.addWidget(self.drop)
@@ -502,10 +476,10 @@ class Window(QMainWindow):
         self.preview_mode.addItems(["Рядом", "Разделитель"])
         self.preview_mode.setAccessibleName("Режим сравнения")
         preview_top.addWidget(self.preview_mode)
-        self.expand = button("Крупно ⤢", self.open_comparison, "small")
+        self.expand = button("Крупно", self.open_comparison, "small")
         self.expand.setEnabled(False)
         preview_top.addWidget(self.expand)
-        self.open_photo = button("Файл ↗", self.open_selected, "small")
+        self.open_photo = button("Открыть", self.open_selected, "small")
         self.open_photo.setToolTip("Открыть результат в полном размере")
         self.open_photo.setEnabled(False)
         preview_top.addWidget(self.open_photo)
@@ -519,7 +493,7 @@ class Window(QMainWindow):
         self.preview_mode.currentIndexChanged.connect(self.compare.set_mode)
         pv.addWidget(self.compare, 1)
         self.preview_detail = label(
-            "Два вида в одном масштабе · колесо — приблизить · «Крупно» — на весь экран.",
+            "",
             "muted",
             True,
         )
@@ -532,28 +506,29 @@ class Window(QMainWindow):
         splitter.setChildrenCollapsible(False)
         main.addWidget(splitter, 1)
         review_row = QHBoxLayout()
-        self.summary = label("Очередь пуста", "muted")
+        self.summary = label("", "muted")
         review_row.addWidget(self.summary)
         review_row.addStretch()
-        self.next_attention = button("Следующий на проверку →", self.select_attention, "small")
+        self.next_attention = button("Следующий на проверку", self.select_attention, "small")
         self.next_attention.setEnabled(False)
+        self.next_attention.hide()
         review_row.addWidget(self.next_attention)
         main.addLayout(review_row)
 
-        self.stage = label(
-            "Готово к работе. Выберите фотографии или перетащите их в окно.", "muted", True
-        )
+        self.stage = label("", "muted", True)
+        self.stage.hide()
         main.addWidget(self.stage)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self.progress.hide()
         main.addWidget(self.progress)
         controls = QHBoxLayout()
-        self.counter = label("0 фотографий", "muted")
+        self.counter = label("", "muted")
         controls.addWidget(self.counter)
         controls.addStretch()
-        self.open_folder = button("Результаты ↗", self.open_results)
+        self.open_folder = button("Результаты", self.open_results)
         self.open_folder.setEnabled(False)
         self.pause = button("Пауза", self.toggle_pause)
         self.cancel = button("Остановить", self.cancel_batch)
@@ -564,7 +539,14 @@ class Window(QMainWindow):
         for widget in (self.open_folder, self.pause, self.cancel, self.start):
             controls.addWidget(widget)
         main.addLayout(controls)
-        outer.addWidget(body, 1)
+        self.pages.addWidget(body)
+        self.pages.addWidget(self.settings_page())
+        from colorpro.update_dialog import UpdatePage
+
+        self.update_page = UpdatePage(self)
+        self.pages.addWidget(self.wrap_page(self.update_page))
+        self.pages.addWidget(self.help_page())
+        outer.addWidget(self.pages, 1)
         self.setCentralWidget(shell)
         for sequence, callback in (("Ctrl+O", self.pick_files), ("Delete", self.remove_selected)):
             shortcut = QShortcut(
@@ -574,13 +556,20 @@ class Window(QMainWindow):
                 shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
             shortcut.activated.connect(callback)
         for name, widget in (
-            ("model", self.model),
             ("device_mode", self.device),
             ("format", self.format),
         ):
             saved = widget.findData(self.settings.value(name, widget.currentData()))
             if saved >= 0:
                 widget.setCurrentIndex(saved)
+            widget.currentIndexChanged.connect(
+                lambda index, key=name, control=widget: self.settings.setValue(
+                    key, control.currentData()
+                )
+            )
+        self.output.editingFinished.connect(
+            lambda: self.settings.setValue("output", self.output.text())
+        )
         geometry = self.settings.value("geometry")
         if geometry is not None:
             self.restoreGeometry(geometry)
@@ -588,26 +577,146 @@ class Window(QMainWindow):
         self.resize(min(self.width(), screen.width()), min(self.height(), screen.height()))
         self.remove.setEnabled(False)
         self.clear.setEnabled(False)
-        from colorpro.update_dialog import UpdateDialog
-
-        self.update_dialog = UpdateDialog(self)
-        self.update_dialog.available.connect(
-            lambda version: self.updates.setText("Обновить до " + version)
-        )
-        self.update_dialog.idle.connect(self.update_idle)
+        self.update_page.available.connect(lambda version: self.updates.setText("Обновления  •"))
+        self.update_page.idle.connect(self.update_idle)
         QTimer.singleShot(8000, self.auto_check_updates)
+
+    def wrap_page(self, content):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+        return scroll
+
+    def page_layout(self, title, subtitle):
+        page = QWidget()
+        page.setObjectName("page")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(36, 30, 36, 30)
+        layout.setSpacing(20)
+        layout.addWidget(label(title, "pageTitle"))
+        layout.addWidget(label(subtitle, "muted", True))
+        return page, layout
+
+    def settings_page(self):
+        page, layout = self.page_layout(
+            "Настройки", "Всё готово к работе. При необходимости измените параметры ниже."
+        )
+        processing = QFrame()
+        processing.setObjectName("card")
+        form = QVBoxLayout(processing)
+        form.setContentsMargins(24, 22, 24, 24)
+        form.setSpacing(12)
+        form.addWidget(label("Обработка", "section"))
+        form.addWidget(label("Устройство", "muted"))
+        self.device = combo_box()
+        self.device.setAccessibleName("Устройство обработки")
+        self.device.addItem("Автоматически", "auto")
+        self.device.addItem("Видеокарта NVIDIA", "cuda")
+        self.device.addItem("Процессор", "cpu")
+        self.device.setToolTip("Автовыбор NVIDIA или процессора. AMD и Intel — через процессор.")
+        form.addWidget(self.device)
+        form.addWidget(
+            label(
+                "В автоматическом режиме ColorPro сам выберет доступное устройство.", "muted", True
+            )
+        )
+        layout.addWidget(processing)
+        saving = QFrame()
+        saving.setObjectName("card")
+        save = QVBoxLayout(saving)
+        save.setContentsMargins(24, 22, 24, 24)
+        save.setSpacing(12)
+        save.addWidget(label("Сохранение", "section"))
+        save.addWidget(label("Формат результата", "muted"))
+        self.format = combo_box()
+        self.format.setAccessibleName("Формат результата")
+        self.format.addItem("PNG · без потерь", "PNG")
+        self.format.addItem("JPEG · качество 100%", "JPEG")
+        self.format.setToolTip(
+            "JPEG: качество 100%, цвет 4:4:4. Для сохранения без потерь выберите PNG."
+        )
+        save.addWidget(self.format)
+        save.addSpacing(4)
+        save.addWidget(label("Папка результатов", "muted"))
+        row = QHBoxLayout()
+        self.output = QLineEdit(
+            str(self.settings.value("output", str(Path.home() / "Pictures" / "ColorPro")))
+        )
+        self.output.setAccessibleName("Папка результатов")
+        row.addWidget(self.output, 1)
+        self.choose_output = button("Выбрать…", self.pick_output)
+        row.addWidget(self.choose_output)
+        save.addLayout(row)
+        save.addWidget(
+            label("Каждая серия — в отдельной папке. Исходники не изменяются.", "muted", True)
+        )
+        layout.addWidget(saving)
+        self.settings_notice = label("Параметры сохраняются автоматически.", "muted", True)
+        layout.addWidget(self.settings_notice)
+        layout.addStretch()
+        return self.wrap_page(page)
+
+    def help_page(self):
+        page, layout = self.page_layout("Помощь", "От исходника до готовой серии — три шага.")
+        for number, title, text in (
+            (
+                "01",
+                "Добавьте фотографии",
+                "Выберите файлы или перетащите их в окно. Можно добавить сразу ZIP-архив.",
+            ),
+            (
+                "02",
+                "Обработайте серию",
+                "Нажмите «Обработать серию». Во время работы доступны пауза и остановка.",
+            ),
+            (
+                "03",
+                "Сравните и сохраните",
+                "Выберите снимок в очереди и сравните до / после. "
+                "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
+            ),
+        ):
+            card = QFrame()
+            card.setObjectName("card")
+            row = QHBoxLayout(card)
+            row.setContentsMargins(22, 22, 22, 22)
+            row.setSpacing(20)
+            row.addWidget(label(number, "stepNumber"), 0, Qt.AlignmentFlag.AlignTop)
+            text_layout = QVBoxLayout()
+            text_layout.addWidget(label(title, "section"))
+            text_layout.addWidget(label(text, "muted", True))
+            row.addLayout(text_layout, 1)
+            layout.addWidget(card)
+        layout.addWidget(
+            label(
+                "Поддерживаются JPEG, PNG, TIFF, WebP и BMP: "
+                "8-битные изображения без прозрачности. RAW и 16-битные файлы пока недоступны.",
+                "muted",
+                True,
+            )
+        )
+        layout.addWidget(
+            label(
+                "Фотографии обрабатываются на вашем компьютере и не отправляются в сеть.",
+                "muted",
+                True,
+            )
+        )
+        layout.addStretch()
+        return self.wrap_page(page)
+
+    def show_page(self, index):
+        self.pages.setCurrentIndex(index)
+        self.nav_buttons[index].setChecked(True)
+        self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
 
     def update_idle(self):
         if self.close_requested:
             self.close()
 
     def show_updates(self):
-        if self.busy():
-            return
-        self.update_dialog.show()
-        self.update_dialog.raise_()
-        if not self.update_dialog.release and not self.update_dialog.running():
-            self.update_dialog.check()
+        self.show_page(2)
 
     def auto_check_updates(self):
         import sys
@@ -615,25 +724,20 @@ class Window(QMainWindow):
 
         if not getattr(sys, "frozen", False) or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
             return
-        if self.busy() or self.close_requested or not self.update_dialog.auto.isChecked():
+        if self.busy() or self.close_requested or not self.update_page.auto.isChecked():
             return
         try:
             checked = int(self.settings.value("update_checked_at", "0"))
         except (ValueError, TypeError):
             checked = 0
         if time.time() - checked >= 86400:
-            self.update_dialog.check()
+            self.update_page.check()
 
     def busy(self):
         return bool(
-            (self.worker and self.worker.isRunning())
+            self.install_pending
+            or (self.worker and self.worker.isRunning())
             or (self.importer and self.importer.isRunning())
-        )
-
-    def model_changed(self):
-        self.model_hint.setText(
-            "Сохранённая V39, без новых экспериментов. "
-            "Настройки выбираются отдельно для каждого снимка."
         )
 
     def pick_files(self):
@@ -662,6 +766,9 @@ class Window(QMainWindow):
     def import_files(self, paths):
         if self.busy():
             return
+        self.show_page(0)
+        self.stage.show()
+        self.progress.show()
         self.stage.setText("Проверка файлов и содержимого ZIP…")
         self.progress.setRange(0, 0)
         self.set_busy(True)
@@ -693,8 +800,8 @@ class Window(QMainWindow):
 
     def update_queue(self):
         count = len(self.queue.items)
-        self.queue_title.setText(f"Фотографии · {count}")
-        self.counter.setText(f"{count} фотографий")
+        self.queue_title.setText(f"В очереди: {count}" if count else "Очередь пуста")
+        self.counter.setText(f"{count} фотографий" if count else "")
         self.drop.setVisible(not count)
         self.table.setVisible(bool(count))
         self.start.setEnabled(bool(count) and not self.busy())
@@ -708,9 +815,10 @@ class Window(QMainWindow):
         self.summary.setText(
             f"Готово: {states.count('corrected')}  ·  Проверить: {attention}  ·  Ошибки: {errors}"
             if self.queue.items
-            else "Очередь пуста"
+            else ""
         )
         self.next_attention.setEnabled(bool(attention or errors))
+        self.next_attention.setVisible(bool(attention or errors))
 
     def select_attention(self):
         rows = self.table.selectionModel().selectedRows()
@@ -745,6 +853,8 @@ class Window(QMainWindow):
             self.stage.setText("Добавьте фотографии для новой серии.")
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
+            self.progress.hide()
+            self.stage.hide()
 
     def set_busy(self, active):
         for widget in (
@@ -752,17 +862,21 @@ class Window(QMainWindow):
             self.empty_add,
             self.remove,
             self.clear,
-            self.model,
             self.device,
             self.format,
             self.output,
             self.choose_output,
-            self.updates,
         ):
             widget.setEnabled(not active)
         self.start.setEnabled(not active and bool(self.queue.items))
         self.clear.setEnabled(not active and bool(self.queue.items))
         self.remove.setEnabled(not active and bool(self.table.selectionModel().selectedRows()))
+        self.settings_notice.setText(
+            "Параметры доступны после завершения обработки."
+            if active
+            else "Параметры сохраняются автоматически."
+        )
+        self.nav_status.setText("Обработка…" if active else "")
 
     def start_batch(self):
         if self.busy() or not self.queue.items:
@@ -772,7 +886,6 @@ class Window(QMainWindow):
             return
         self.settings.setValue("output", self.output.text())
         for name, widget in (
-            ("model", self.model),
             ("device_mode", self.device),
             ("format", self.format),
         ):
@@ -786,6 +899,8 @@ class Window(QMainWindow):
         self.open_folder.setEnabled(False)
         self.set_busy(True)
         self.progress.setRange(0, 0)
+        self.progress.show()
+        self.stage.show()
         self.counter.setText(f"0 / {len(self.queue.items)}")
         self.stage.setText("Подготовка к обработке…")
         self.pause.setText("Пауза")
@@ -797,7 +912,7 @@ class Window(QMainWindow):
         self.worker = BatchWorker(
             self.queue.items,
             self.output.text().strip(),
-            self.model.currentData(),
+            "v39",
             self.device.currentData(),
             self.format.currentData(),
             self.engine_factory,
@@ -817,7 +932,7 @@ class Window(QMainWindow):
         elif kind == "ready":
             self.progress.setRange(0, len(self.queue.items))
             self.progress.setValue(0)
-            self.stage.setText(f"Обработка на {event['device']}")
+            self.stage.setText("Обработка фотографий…")
         elif kind == "paused":
             self.stage.setText(
                 "На паузе. Нажмите «Продолжить», чтобы обработать оставшиеся снимки."
@@ -845,6 +960,7 @@ class Window(QMainWindow):
                 f"{event['done']} / {event['total']}  ·  {event['done'] / event['total']:.0%}"
                 f"  ·  ≈ {duration(remaining)} осталось"
             )
+            self.nav_status.setText(f"Готово {event['done']} из {event['total']}")
             self.update_summary()
             selected = self.table.selectionModel().selectedRows()
             if selected and selected[0].row() == event["record"]["index"]:
@@ -973,9 +1089,7 @@ class Window(QMainWindow):
         self.after.reset("Результат появится после обработки")
         self.compare.clear()
         self.preview_title.setText("До / после")
-        self.preview_detail.setText(
-            "Два вида в одном масштабе · колесо — приблизить · «Крупно» — на весь экран."
-        )
+        self.preview_detail.setText("")
         self.open_photo.setEnabled(False)
 
     def load_preview(self):
@@ -1048,37 +1162,6 @@ class Window(QMainWindow):
     def error(self, message):
         QMessageBox.warning(self, "ColorPro", message)
 
-    def show_about(self):
-        QMessageBox.information(
-            self,
-            "О ColorPro",
-            f"ColorPro {__version__} · V39\n\n"
-            "Локальная цветокоррекция. Фотографии никуда не отправляются.\n"
-            "Интерфейс создан на основе вашего RetushPro.\n\n"
-            "V39 выбирает автоинструмент и уровни для всего снимка. "
-            "Не ретуширует кожу и не генерирует детали. Размер кадра сохраняется "
-            "с учётом EXIF-поворота. ICC преобразуется в sRGB.\n\n"
-            "PNG — без потерь; JPEG — качество 100%, цвет 4:4:4, повторное сжатие. "
-            "Поддерживается непрозрачный 8-битный RGB/L. "
-            "RAW и 16-битные файлы пока не поддерживаются.\n\n"
-            "Результаты сохраняются отдельно. На отдельных снимках возможны "
-            "ошибки цвета — проверяйте лица в сравнении «До / после».",
-        )
-
-    def show_model_info(self):
-        QMessageBox.information(
-            self,
-            "Сохранённая модель V39",
-            "V39 · эпоха 5 · исходные веса (raw, не EMA)\n\n"
-            "Это именно версия из проверки 70 фотографий. "
-            "Никаких поправок V71, дообучения или смешивания моделей.\n\n"
-            "Контрольная сумма весов проверяется перед обработкой. "
-            "Все инструменты применяются к исходному разрешению; "
-            "маленькое превью используется только для выбора настроек.\n\n"
-            "Фотографии не отправляются в сеть. Обновления приложения доступны "
-            "через GitHub; установка запускается только по вашему нажатию.",
-        )
-
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() and not self.busy():
             event.acceptProposedAction()
@@ -1090,9 +1173,9 @@ class Window(QMainWindow):
             event.acceptProposedAction()
 
     def closeEvent(self, event):
-        if self.update_dialog.running():
+        if self.update_page.running():
             self.close_requested = True
-            self.update_dialog.worker.requestInterruption()
+            self.update_page.worker.requestInterruption()
             event.ignore()
             return
         if self.busy():
