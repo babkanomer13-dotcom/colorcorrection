@@ -8,10 +8,10 @@ runtime DLL is silently bundled into a routine code update.
 import argparse
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from colorpro import __version__
-from colorpro.updates import sha256, validate_manifest
+from colorpro.updates import sha256
 
 
 def inventory(root):
@@ -48,22 +48,15 @@ def plan(current, bases):
     return changed, {n: r for n, r in current.items() if n not in changed}
 
 
-def generate(dist, bases, output, platform, baseline_manifest, release_metadata):
+def generate(dist, bases, output, platform, offline=False):
     current = inventory(dist)
-    changed, required = plan(current, [inventory(p) for p in bases])
-    baseline = json.loads(baseline_manifest.read_text("utf8"))
-    remote = json.loads(release_metadata.read_text("utf8"))
-    if remote.get("draft") or remote.get("tag_name") != "colorpro-v" + baseline["version"]:
-        raise ValueError("Runtime baseline must already be published")
-    verified = validate_manifest(
-        baseline, {a["name"]: a for a in remote["assets"]}, baseline["version"], platform
-    )
+    changed, required = (current, {}) if offline else plan(current, [inventory(p) for p in bases])
     output.mkdir(parents=True, exist_ok=False)
     # Static, validated source paths; no downloaded manifest can choose destinations.
     lines = []
     for name, row in changed.items():
         relative = name.replace("/", "\\")
-        parent = str(Path(relative).parent)
+        parent = str(PurePosixPath(name).parent).replace("/", "\\")
         dest = "{app}" + ("\\" + parent if parent != "." else "")
         lines.append(
             (
@@ -79,51 +72,36 @@ def generate(dist, bases, output, platform, baseline_manifest, release_metadata)
     (output / "targets.txt").write_text(
         "\n".join(n.replace("/", "\\") for n in current), encoding="utf8"
     )
-    code = ["procedure AddBaselineFiles;", "begin"]
-    for row in verified["files"]:
-        code.append(
-            "  AddComponent('{}', '{}', '{}');".format(row["name"], row["sha256"], row["url"])
-        )
-    code += [
-        "end;",
-        "",
-        "function BaselineInstaller: String;",
-        "begin",
-        "  Result := '{}';".format(verified["installer"]),
-        "end;",
-    ]
-    (output / "baseline.iss").write_text("\n".join(code), encoding="utf8")
     report = dict(
-        schema="colorpro-compact-v1",
+        schema="colorpro-offline-v1" if offline else "colorpro-compact-v1",
         version=__version__,
         platform=platform,
-        baseline_version=baseline["version"],
         changed=changed,
         required=required,
-        download_bytes=sum(r["size"] for r in verified["files"]),
+        download_bytes=0,
         changed_bytes=sum(r["size"] for r in changed.values()),
         preserved_bytes=sum(r["size"] for r in required.values()),
     )
-    (output / "compact.json").write_text(json.dumps(report, indent=2), encoding="utf8")
+    (output / ("offline.json" if offline else "compact.json")).write_text(
+        json.dumps(report, indent=2), encoding="utf8"
+    )
     return report
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dist", type=Path, required=True)
-    parser.add_argument("--base", type=Path, action="append", required=True)
+    parser.add_argument("--base", type=Path, action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--platform", choices=("win10", "win7"), required=True)
-    parser.add_argument("--baseline-manifest", type=Path, required=True)
-    parser.add_argument("--release-metadata", type=Path, required=True)
+    parser.add_argument("--offline", action="store_true", help="Embed every file; no downloads")
     args = parser.parse_args()
     result = generate(
         args.dist.resolve(),
         [p.resolve() for p in args.base],
         args.output,
         args.platform,
-        args.baseline_manifest,
-        args.release_metadata,
+        args.offline,
     )
     print(json.dumps({k: v for k, v in result.items() if k not in ("changed", "required")}))
 

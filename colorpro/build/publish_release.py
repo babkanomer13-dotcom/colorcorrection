@@ -57,6 +57,8 @@ def prepare(folder):
             json.dumps(manifest, indent=2), encoding="utf8"
         )
     files = sorted(p for p in folder.iterdir() if p.is_file() and p.name.startswith("ColorPro-"))
+    if any(p.stat().st_size >= 2 * 1024**3 for p in files):
+        raise ValueError("GitHub asset limit exceeded (including offline installers)")
     (folder / "SHA256SUMS.txt").write_text(
         "".join(sha256(p) + "  " + p.name + "\n" for p in files), encoding="ascii"
     )
@@ -76,6 +78,12 @@ def main():
     if not args.publish and not args.verify_draft:
         print("Prepared", tag, len(files), "assets")
         return
+    release_files = files + [
+        args.artifacts / "SHA256SUMS.txt",
+        args.notes or args.artifacts / "release-notes.txt",
+    ]
+    if any(not path.is_file() for path in release_files):
+        raise ValueError("Missing release notes or checksums")
     if args.publish:
         if not args.commit or not re.fullmatch(r"[0-9a-f]{40}", args.commit) or not args.notes:
             parser.error("--publish requires explicit --commit and --notes")
@@ -94,7 +102,7 @@ def main():
             str(args.notes),
         )
         # Sequential uploads are retryable with gh release upload (no --clobber).
-        for path in files + [args.artifacts / "SHA256SUMS.txt", args.notes]:
+        for path in release_files:
             print("Uploading", path.name, flush=True)
             gh("release", "upload", tag, str(path), "--repo", REPOSITORY)
     # Draft tags do not yet exist in Git and cannot be fetched via /tags/{tag}.
@@ -109,7 +117,9 @@ def main():
     if not remote["draft"]:
         raise ValueError("Refusing to modify an already published release")
     assets = {a["name"]: a for a in remote["assets"]}
-    for path in files:
+    if set(assets) != {path.name for path in release_files}:
+        raise ValueError("Unexpected or missing release assets")
+    for path in release_files:
         a = assets[path.name]
         if a["size"] != path.stat().st_size or a.get("digest") != "sha256:" + sha256(path):
             raise ValueError("Remote asset digest mismatch: " + path.name)

@@ -9,9 +9,11 @@ the built-in updater. Local installers alone are not the final delivery.
   before publishing. Never replace assets in an already published release.
 - Routine app releases must be compact file-level updates, not multi-gigabyte
   runtime reinstallations. Use build/compact.py and verify actual old-to-new
-  installation without runtime downloads. A new PC needs only one Setup.exe.
-- Keep the pinned 1.2.1 runtime release available: compact installers depend on
-  its verified assets for first installation. Runtime changes require an explicit
+  installation without runtime downloads. A new PC needs one full Offline.exe;
+  Setup.exe is update-only and must never download or run a baseline installer.
+  Full installers skip identical files and must be tested offline and on rerun.
+- Keep the pinned 1.2.1 runtime release available: already published 1.3.0
+  bootstrap installers depend on it. Runtime changes require an explicit
   new baseline and migration tests, never a silently enlarged routine update.
 - After publishing, check that the updater discovers the release for both channels
   and does not offer reinstalling the same version or downgrading a newer version.

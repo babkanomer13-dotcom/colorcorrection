@@ -1,11 +1,8 @@
-{ Included by setup.iss only for compact, self-contained maintenance installers.
-  Omitted components are hashed before writing; clean installs fetch a pinned
-  complete baseline automatically. An in-app update NEVER silently downloads it. }
+{ Shared maintenance checks. Offline installers carry ALL files; compact
+  updaters carry ONLY changed files. Neither downloads or runs another setup. }
 var
-  ComponentPage: TDownloadWizardPage;
   VerifyPage: TOutputProgressWizardPage;
   MissingComponent: String;
-  ComponentNames, ComponentHashes: TStringList;
 
 function GetFileAttributesW(Name: String): LongWord;
   external 'GetFileAttributesW@kernel32.dll stdcall';
@@ -37,18 +34,22 @@ begin
 end;
 
 function VerifyComponents: Boolean;
-var Rows: TStringList; I, Sep: Integer; Name, Hash: String;
+var Rows: TStringList; I: Integer;
+#ifdef CompactRoot
+  Sep: Integer; Name, Hash: String;
+#endif
 begin
   Result := False;
   Rows := TStringList.Create;
   VerifyPage.Show;
   try
-    ExtractTemporaryFile('required.txt');
     ExtractTemporaryFile('targets.txt');
     Rows.LoadFromFile(ExpandConstant('{tmp}\targets.txt'));
     for I := 0 to Rows.Count - 1 do
       if not SafePath(ExpandConstant('{app}\') + Rows[I]) then
         RaiseException('Недопустимая ссылка в папке установки.');
+#ifdef CompactRoot
+    ExtractTemporaryFile('required.txt');
     Rows.LoadFromFile(ExpandConstant('{tmp}\required.txt'));
     for I := 0 to Rows.Count - 1 do begin
       Sep := Pos('|', Rows[I]);
@@ -62,6 +63,7 @@ begin
         Exit;
       end;
     end;
+#endif
     Result := True;
   finally
     Rows.Free;
@@ -69,30 +71,9 @@ begin
   end;
 end;
 
-procedure AddComponent(Name, Hash, Url: String);
-var Cached: String;
-begin
-  ComponentNames.Add(Name);
-  ComponentHashes.Add(Hash);
-  { Optional already-downloaded files; their hashes are always verified. }
-  Cached := ExpandConstant('{param:COMPONENTSROOT|{src}}') + '\' + Name;
-  if MatchesFile(Cached, Hash) then begin
-    if not CopyFile(Cached, ExpandConstant('{tmp}\') + Name, False) then
-      RaiseException('Не удалось подготовить компонент: ' + Name);
-  end else
-    ComponentPage.Add(Url, Name, Hash);
-end;
-
-#include CompactRoot + "\baseline.iss"
-
 procedure InitializeWizard;
 begin
-  ComponentPage := CreateDownloadPage('Компоненты ColorPro',
-    'Первая установка: загружаем библиотеки и модель. При обычном обновлении они не нужны.', nil);
-  ComponentPage.ShowBaseNameInsteadOfUrl := True;
   VerifyPage := CreateOutputProgressPage('Подготовка ColorPro', 'Проверяем файлы перед установкой.');
-  ComponentNames := TStringList.Create;
-  ComponentHashes := TStringList.Create;
 end;
 
 function VersionPart(var Value: String): Integer;
@@ -119,7 +100,7 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
-var ExitCode, I: Integer; Params, InstalledVersion: String;
+var InstalledVersion: String;
 begin
   Result := '';
   try
@@ -132,51 +113,15 @@ begin
       'DisplayVersion', InstalledVersion) then
       if IsNewer(InstalledVersion, '{#ProductVersion}') then
         RaiseException('Установлена более новая версия ColorPro. Откат отменён.');
-    if VerifyComponents then begin
-      Log('COMPACT_UPDATE: runtime verified; no component download.');
-      Exit;
-    end;
-    if ExpandConstant('{param:COLORPROUPDATE|0}') = '1' then
-      RaiseException('Компонент отсутствует или изменён: ' + MissingComponent + #13#10 +
-        'Обновление остановлено без изменения файлов. Запустите этот установщик вручную для восстановления компонентов.');
-    if FileExists(ExpandConstant('{app}\ColorPro.exe')) then
-      if SuppressibleMsgBox('Для восстановления компонентов требуется загрузить полный комплект. Продолжить?',
-           mbConfirmation, MB_YESNO, IDNO) <> IDYES then
-        RaiseException('Восстановление отменено.');
-    ComponentNames.Clear;
-    ComponentHashes.Clear;
-    ComponentPage.Clear;
-    AddBaselineFiles;
-    ComponentPage.Show;
-    try
-      ComponentPage.Download;
-    finally
-      ComponentPage.Hide;
-    end;
-    for I := 0 to ComponentNames.Count - 1 do
-      if not MatchesFile(ExpandConstant('{tmp}\') + ComponentNames[I], ComponentHashes[I]) then
-        RaiseException('Контрольная сумма компонента не совпала.');
-    Params := '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /TASKS="" /DIR="' + ExpandConstant('{app}') +
-      '" /LOG="' + ExpandConstant('{localappdata}\{#FolderName}\components-install.log') + '"';
-    ForceDirectories(ExpandConstant('{localappdata}\{#FolderName}'));
-    VerifyPage.Show;
-    try
-      VerifyPage.SetText('Устанавливаем компоненты ColorPro', 'Это требуется только при первой установке или восстановлении.');
-      if not Exec(ExpandConstant('{tmp}\') + BaselineInstaller, Params, '', SW_HIDE,
-                  ewWaitUntilTerminated, ExitCode) then RaiseException('Не удалось установить компоненты.');
-      if ExitCode <> 0 then RaiseException('Установка компонентов завершилась с кодом ' + IntToStr(ExitCode));
-    finally
-      VerifyPage.Hide;
-    end;
-    if not VerifyComponents then RaiseException('Не удалось проверить компонент: ' + MissingComponent);
-    Log('FRESH_INSTALL: baseline installed and verified.');
+    if not VerifyComponents then
+      RaiseException('Этот файл — только обновление. Компонент отсутствует или изменён: ' + MissingComponent + #13#10 +
+        'Файлы приложения не изменены. Для первой установки или восстановления скачайте полный установщик с окончанием -Offline.exe со страницы github.com/babkanomer13-dotcom/colorcorrection/releases/latest.');
+#ifdef CompactRoot
+    Log('COMPACT_UPDATE: runtime verified; no component download.');
+#else
+    Log('OFFLINE_INSTALL: all components embedded; identical files are preserved.');
+#endif
   except
     Result := GetExceptionMessage;
   end;
-end;
-
-procedure DeinitializeSetup;
-begin
-  if ComponentNames <> nil then ComponentNames.Free;
-  if ComponentHashes <> nil then ComponentHashes.Free;
 end;

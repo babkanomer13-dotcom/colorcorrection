@@ -77,7 +77,7 @@ def preserved_registration(platform):
                         winreg.SetValueEx(key, item, 0, kind, value)
 
 
-def run_installer(exe, install, log, *options, timeout=600):
+def run_installer(exe, install, log, *options, timeout=900):
     result = subprocess.run(  # noqa: S603 -- supplied QA installer, explicit arguments, no shell
         [
             str(exe),
@@ -109,7 +109,7 @@ def main():
     parser.add_argument("--installer", type=Path, required=True)
     parser.add_argument("--base", type=Path, required=True)
     parser.add_argument("--dist", type=Path, required=True)
-    parser.add_argument("--components", type=Path, required=True)
+    parser.add_argument("--offline", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     root = args.output.resolve()
@@ -131,7 +131,10 @@ def main():
         code = run_installer(args.installer, upgrade, root / "corrupt.log", "/COLORPROUPDATE=1")
         assert code != 0
         assert inventory(upgrade) == before, "Broken baseline must remain untouched"
+        assert run_installer(args.installer, upgrade, root / "corrupt-manual.log") != 0
+        assert inventory(upgrade) == before, "Manual patch must not reinstall a baseline"
         component.write_bytes(original)
+        os.utime(component, (946684800, 946684800))
         stamp = component.stat().st_mtime_ns
         assert (
             run_installer(args.installer, upgrade, root / "upgrade.log", "/COLORPROUPDATE=1") == 0
@@ -162,19 +165,47 @@ def main():
         ) as key:
             winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, installed_version)
         fresh = root / "fresh"
-        assert (
-            run_installer(
-                args.installer,
-                fresh,
-                root / "fresh.log",
-                "/COMPONENTSROOT=" + str(args.components.resolve()),
-            )
-            == 0
-        )
-        assert "FRESH_INSTALL: baseline installed and verified." in (root / "fresh.log").read_text(
-            "utf-8-sig"
-        )
+        assert run_installer(args.installer, fresh, root / "patch-on-empty.log") != 0
+        assert not fresh.exists(), "A patch must not bootstrap a fresh installation"
+        assert run_installer(args.offline, fresh, root / "fresh.log") == 0
+        assert "OFFLINE_INSTALL: all components embedded; identical files are preserved." in (
+            root / "fresh.log"
+        ).read_text("utf-8-sig")
         assert_distribution(fresh, expected)
+        # Deliberately different mtimes: Inno normally restores archived mtimes
+        # on replacement, so comparing only original timestamps proves nothing.
+        for name in expected:
+            os.utime(fresh / name, (946684800, 946684800))
+        stamps = {name: (fresh / name).stat().st_mtime_ns for name in expected}
+        assert run_installer(args.offline, fresh, root / "repeat-offline.log") == 0
+        assert_distribution(fresh, expected)
+        assert all((fresh / n).stat().st_mtime_ns == stamp for n, stamp in stamps.items())
+        repair = fresh / component.relative_to(upgrade)
+        repair.write_bytes(b"damage to test selective offline repair")
+        assert run_installer(args.offline, fresh, root / "repair-offline.log") == 0
+        assert_distribution(fresh, expected)
+        assert all(
+            (fresh / n).stat().st_mtime_ns == stamp
+            for n, stamp in stamps.items()
+            if fresh / n != repair
+        )
+        # A full installer must not downgrade either.
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            registration,
+            0,
+            winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "99.0.0")
+        assert run_installer(args.offline, fresh, root / "offline-downgrade.log") != 0
+        assert_distribution(fresh, expected)
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            registration,
+            0,
+            winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, installed_version)
         env = os.environ.copy()
         env["LOCALAPPDATA"] = str(root / "profile")
         env["QT_QPA_PLATFORM"] = "offscreen"
@@ -213,6 +244,11 @@ def main():
         platform=args.platform,
         status="PASS",
         compact_upgrade=True,
+        installer_sha256=sha256(args.installer),
+        offline_sha256=sha256(args.offline),
+        patch_never_bootstraps=True,
+        full_rerun_preserves_all_distribution_mtimes=True,
+        full_repairs_only_damaged_files=True,
         unchanged_runtime_not_replaced=True,
         corrupt_baseline_no_mutation=True,
         downgrade_blocked=True,

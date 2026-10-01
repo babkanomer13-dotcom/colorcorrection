@@ -1,5 +1,5 @@
 #ifndef ProductVersion
-  #define ProductVersion "1.3.0"
+  #define ProductVersion "1.3.1"
 #endif
 #ifdef Legacy
   #define ProductName "ColorPro Win7"
@@ -14,14 +14,21 @@
   #define ProductMutex "Local\ColorPro.Desktop"
   #define ProductId "{71C64124-2B1F-421C-B3E2-D204979CD1E5}"
 #endif
+#ifdef CompactRoot
+  #define PayloadRoot CompactRoot
+#else
+  #ifndef FullRoot
+    #error A verified CompactRoot or FullRoot file plan is required
+  #endif
+  #define PayloadRoot FullRoot
+  #define OutputName StringChange(OutputName, "-Setup", "-Offline")
+#endif
 [Setup]
 AppId={{#ProductId}
 AppName={#ProductName}
 AppVersion={#ProductVersion}
 AppMutex={#ProductMutex}
-#ifdef CompactRoot
 SetupMutex=Local\{#FolderName}.CompactSetup
-#endif
 AppPublisher=ColorPro
 DefaultDirName={localappdata}\Programs\{#FolderName}
 DefaultGroupName={#ProductName}
@@ -39,7 +46,11 @@ OutputDir={#ReleaseRoot}
 OutputBaseFilename={#OutputName}
 SetupIconFile={#StageRoot}\colorpro.ico
 UninstallDisplayIcon={app}\ColorPro.exe
+#ifdef CompactRoot
 Compression=lzma2/fast
+#else
+Compression=lzma2/ultra64
+#endif
 SolidCompression=yes
 LZMANumBlockThreads=4
 LZMAUseSeparateProcess=yes
@@ -53,13 +64,7 @@ CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
 UninstallDisplayName={#ProductName} {#ProductVersion}
-#ifndef CompactRoot
-#ifndef Legacy
-DiskSpanning=yes
-DiskSliceSize=1000000000
-SlicesPerDisk=1
-#endif
-#endif
+DiskSpanning=no
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
@@ -69,12 +74,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; Flags: unchecked
 
 [Files]
+#include PayloadRoot + "\files.iss"
+Source: "{#PayloadRoot}\targets.txt"; Flags: dontcopy
 #ifdef CompactRoot
-#include CompactRoot + "\files.iss"
 Source: "{#CompactRoot}\required.txt"; Flags: dontcopy
-Source: "{#CompactRoot}\targets.txt"; Flags: dontcopy
-#else
-Source: "{#DistRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 
 [Icons]
@@ -88,9 +91,7 @@ Filename: "{app}\ColorPro.exe"; Description: "Запустить {#ProductName}"
 
 ; Never remove user photographs, settings, logs or processed outputs on uninstall.
 [Code]
-#ifdef CompactRoot
 #include "compact_setup.iss"
-#endif
 #ifdef Legacy
 function GetModuleHandle(Name: String): LongWord;
   external 'GetModuleHandleW@kernel32.dll stdcall';
