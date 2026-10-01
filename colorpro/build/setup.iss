@@ -1,5 +1,5 @@
 #ifndef ProductVersion
-  #define ProductVersion "1.2.1"
+  #define ProductVersion "1.3.0"
 #endif
 #ifdef Legacy
   #define ProductName "ColorPro Win7"
@@ -19,6 +19,9 @@ AppId={{#ProductId}
 AppName={#ProductName}
 AppVersion={#ProductVersion}
 AppMutex={#ProductMutex}
+#ifdef CompactRoot
+SetupMutex=Local\{#FolderName}.CompactSetup
+#endif
 AppPublisher=ColorPro
 DefaultDirName={localappdata}\Programs\{#FolderName}
 DefaultGroupName={#ProductName}
@@ -42,6 +45,7 @@ LZMANumBlockThreads=4
 LZMAUseSeparateProcess=yes
 WizardStyle=modern
 DisableProgramGroupPage=yes
+AllowNoIcons=yes
 DisableDirPage=no
 DisableWelcomePage=no
 WizardSizePercent=110
@@ -49,10 +53,12 @@ CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
 UninstallDisplayName={#ProductName} {#ProductVersion}
+#ifndef CompactRoot
 #ifndef Legacy
 DiskSpanning=yes
 DiskSliceSize=1000000000
 SlicesPerDisk=1
+#endif
 #endif
 
 [Languages]
@@ -63,7 +69,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; Flags: unchecked
 
 [Files]
+#ifdef CompactRoot
+#include CompactRoot + "\files.iss"
+Source: "{#CompactRoot}\required.txt"; Flags: dontcopy
+Source: "{#CompactRoot}\targets.txt"; Flags: dontcopy
+#else
 Source: "{#DistRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Icons]
 Name: "{group}\{#ProductName}"; Filename: "{app}\ColorPro.exe"; WorkingDir: "{app}"
@@ -76,6 +88,9 @@ Filename: "{app}\ColorPro.exe"; Description: "Запустить {#ProductName}"
 
 ; Never remove user photographs, settings, logs or processed outputs on uninstall.
 [Code]
+#ifdef CompactRoot
+#include "compact_setup.iss"
+#endif
 #ifdef Legacy
 function GetModuleHandle(Name: String): LongWord;
   external 'GetModuleHandleW@kernel32.dll stdcall';

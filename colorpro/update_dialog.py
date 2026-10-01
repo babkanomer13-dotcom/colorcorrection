@@ -167,11 +167,16 @@ class UpdatePage(QWidget):
             self.status.setText("Установлена актуальная версия " + __version__)
             return
         size = sum(row["size"] for row in release["files"]) / 1024**2
-        self.status.setText("Доступна ColorPro {} · {:.0f} МБ".format(release["version"], size))
+        self.status.setText("Доступна ColorPro {} · {:.1f} МБ".format(release["version"], size))
         self.notes.setText(
             release["notes"] or "Обновление приложения. Настройки и фотографии сохраняются."
         )
         self.notes.show()
+        if release.get("kind") == "compact":
+            self.notes.setText(
+                "Обновятся только изменённые файлы приложения. "
+                "Библиотеки и модель заново не скачиваются.\n\n" + self.notes.text()
+            )
         self.action.show()
         self.available.emit(release["version"])
         if not getattr(sys, "frozen", False):

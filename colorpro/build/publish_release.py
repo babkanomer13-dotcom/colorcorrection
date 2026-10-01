@@ -45,6 +45,14 @@ def prepare(folder):
             installer=prefix + ".exe",
             files=files,
         )
+        compact_path = folder / (platform + "-compact.json")
+        if compact_path.is_file():
+            compact = json.loads(compact_path.read_text("utf8"))
+            if compact.get("version") != __version__ or compact.get("platform") != platform:
+                raise ValueError("Wrong compact build receipt")
+            if len(files) != 1 or files[0]["size"] > 150 * 1024**2:
+                raise ValueError("Unexpected files in compact release")
+            manifest["kind"] = "compact"
         (folder / (f"ColorPro-{__version__}-{platform}-update.json")).write_text(
             json.dumps(manifest, indent=2), encoding="utf8"
         )

@@ -1,4 +1,4 @@
-"""Public GitHub releases, isolated OS channels and verified Inno installers.
+"""Public GitHub releases, isolated OS channels and verified compact installers.
 
 No photograph data or credentials are sent. No downloaded Python/PowerShell is
 executed. Only a hash-verified, explicitly named product installer may be run.
@@ -158,7 +158,12 @@ def validate_manifest(manifest, assets, version, platform):
         verified.append(info)
     if sum(row["size"] for row in verified) > MAX_TOTAL:
         raise ValueError("Слишком большой комплект обновления")
-    return dict(version=version, platform=platform, installer=installer, files=verified)
+    kind = manifest.get("kind", "full")
+    if kind not in {"compact", "full"}:
+        raise ValueError("Неизвестный тип обновления")
+    if kind == "compact" and (len(verified) != 1 or verified[0]["size"] > 150 * 1024**2):
+        raise ValueError("Неверный компактный пакет обновления")
+    return dict(version=version, platform=platform, installer=installer, files=verified, kind=kind)
 
 
 def latest_release(current_version, platform):
