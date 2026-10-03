@@ -214,7 +214,7 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
     )
     window.show()
     assert not hasattr(window, "model")
-    assert window.pages.count() == 5
+    assert window.pages.count() == 6
     assert window.device.currentData() == "auto" and window.device.count() == 3
     assert "100%" in window.format.itemText(1)
     assert not window.start.isEnabled()
@@ -262,7 +262,7 @@ def test_small_window_layout(app, tmp_path):
     window.close()
 
 
-def test_white_workspace_and_popup(app, tmp_path):
+def test_redesigned_workspace_and_readable_popup(app, tmp_path):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QWidget
 
@@ -275,8 +275,8 @@ def test_white_workspace_and_popup(app, tmp_path):
     app.processEvents()
     assert window.device.currentData() == "auto"
     body = window.findChild(QWidget, "body")
-    assert body.grab().toImage().pixelColor(1, 1) == QColor("white")
-    assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("white")
+    assert body.grab().toImage().pixelColor(1, 1) == QColor("#f6f6fd")
+    assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("#f6f6fd")
     window.show_page(window.SETTINGS)
     app.processEvents()
     for combo in (window.device, window.format):
@@ -289,8 +289,8 @@ def test_white_workspace_and_popup(app, tmp_path):
         combo.hidePopup()
     window.open_comparison()
     app.processEvents()
-    assert window.review.grab().toImage().pixelColor(1, 1) == QColor("white")
-    assert window.review.view.grab().toImage().pixelColor(10, 50) == QColor("white")
+    assert window.review.grab().toImage().pixelColor(1, 1) == QColor("#f6f6fd")
+    assert window.review.view.grab().toImage().pixelColor(10, 50) == QColor("#f6f6fd")
     window.close()
 
 
@@ -449,3 +449,74 @@ def test_kernel_lock_release(tmp_path):
     one.close()
     two = BatchLease(path)
     two.close()
+
+
+def test_thumbnail_checkbox_and_stats(app, photo, tmp_path):
+    from colorpro.ui import Window
+
+    second = tmp_path / "second.png"
+    Image.new("RGB", (45, 90), "red").save(second)
+    originals = {p: p.read_bytes() for p in (photo[0], second)}
+    window = Window(settings=QSettings(str(tmp_path / "queue.ini"), QSettings.Format.IniFormat))
+    window.show()
+    window.import_files([str(photo[0]), str(second)])
+    pump(app, lambda: len(window.queue.thumbnails) == 2 and not window.thumbnail_worker.isRunning())
+    assert all(not pix.isNull() for pix, _ in window.queue.thumbnails.values())
+    assert {size for _, size in window.queue.thumbnails.values()} == {"100 × 80", "45 × 90"}
+    window.queue.update(0, {"status": "corrected"})
+    window.queue.update(1, {"status": "running"})
+    window.update_summary()
+    assert [label.text() for label in window.stat_values] == ["1", "1", "0", "2"]
+    window.table.clearSelection()
+    window.table.horizontalHeader().toggle_all(0)
+    assert len(window.queue.checked) == 2 and window.remove.isEnabled()
+    window.queue.setData(
+        window.queue.index(0, 0), Qt.CheckState.Unchecked, Qt.ItemDataRole.CheckStateRole
+    )
+    assert len(window.queue.checked) == 1
+    window.remove_selected()
+    assert len(window.queue.items) == 1 and not window.queue.checked
+    assert all(path.read_bytes() == content for path, content in originals.items())
+    window.close()
+    pump(app, lambda: not window.isVisible())
+
+
+def test_neutral_comparison_canvas(app):
+    from PySide6.QtGui import QColor, QPixmap
+
+    from colorpro.preview import CompareView
+
+    view = CompareView()
+    view.resize(800, 450)
+    photo = QPixmap(60, 100)
+    photo.fill(QColor("white"))
+    view.set_pixmaps(photo, photo)
+    view.show()
+    app.processEvents()
+    image = view.grab().toImage()
+    assert image.pixelColor(10, 100) == QColor("#292929")
+    assert image.pixelColor(400, 100) == QColor("#f6f6fd")
+    assert image.pixelColor(195, 200) == QColor("white")
+    view.close()
+
+
+def test_profile_and_sidebar_order(app, tmp_path):
+    from colorpro.ui import Window
+
+    settings = QSettings(str(tmp_path / "profile.ini"), QSettings.Format.IniFormat)
+    window = Window(settings=settings)
+    window.show()
+    app.processEvents()
+    help_button = window.nav_buttons[window.HELP]
+    update_button = window.nav_buttons[window.UPDATES]
+    assert help_button.y() > update_button.y()
+    assert help_button.y() - update_button.geometry().bottom() < 20
+    assert window.profile_button.y() > help_button.geometry().bottom()
+    QTest.mouseClick(window.profile_button, Qt.MouseButton.LeftButton)
+    assert window.pages.currentIndex() == window.PROFILE
+    window.profile_name.setText("Анна Иванова")
+    assert window.profile_button.name == "Анна Иванова"
+    window.close()
+    reopened = Window(settings=settings)
+    assert reopened.profile_name.text() == reopened.profile_button.name == "Анна Иванова"
+    reopened.close()

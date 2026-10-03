@@ -18,6 +18,7 @@ APP = [
     "preview.py",
     "ui.py",
     "widgets.py",
+    "design.py",
     "launcher.py",
     "diagnostics.py",
     "updates.py",
@@ -85,6 +86,9 @@ def main():
         out = stage / "colorpro" / name
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf8")
+    assets = stage / "colorpro/assets"
+    assets.mkdir()
+    shutil.copyfile(ROOT / "colorpro/assets/logo.png", assets / "logo.png")
     payload = stage / "payload"
     origin = Path(config["runtime_root"]) / "colorcorrection"
     changes = {}

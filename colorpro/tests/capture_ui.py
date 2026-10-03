@@ -17,10 +17,10 @@ def main():
     args = parser.parse_args()
     initialize()
     from PySide6.QtCore import QSettings
-    from PySide6.QtGui import QFontDatabase
+    from PySide6.QtGui import QFontDatabase, QPixmap
     from PySide6.QtWidgets import QApplication
 
-    from colorpro.files import collect_inputs
+    from colorpro.files import collect_inputs, preview_bytes, read_image
     from colorpro.ui import STYLE, Window, icon
 
     app = QApplication([])
@@ -39,7 +39,13 @@ def main():
         window.grab().save(str(args.output / f"{name}.png"))
     for size, suffix in [((1220, 820), ""), ((980, 640), "-small")]:
         window.resize(*size)
-        for page, name in ((1, "compare-empty"), (2, "settings"), (3, "updates"), (4, "help")):
+        for page, name in (
+            (1, "compare-empty"),
+            (2, "settings"),
+            (3, "updates"),
+            (4, "help"),
+            (5, "profile"),
+        ):
             window.show_page(page)
             app.processEvents()
             window.grab().save(str(args.output / f"{name}{suffix}.png"))
@@ -56,17 +62,31 @@ def main():
     items, errors = collect_inputs([r["input"]["path"] for r in report["records"]])
     assert not errors
     window.queue.add(items)
-    for r in report["records"]:
-        window.queue.update(r["index"], r)
+    by_path = {r["input"]["path"]: r for r in report["records"]}
+    for index, item in enumerate(window.queue.items):
+        window.queue.update(index, dict(by_path[str(item.path)], index=index))
     window.output_folder = report["output"]
     window.open_folder.setEnabled(True)
     window.update_queue()
     window.table.selectRow(1)
     deadline = time.monotonic() + 20
-    while window.compare.after is None and time.monotonic() < deadline:
+    while (
+        window.compare.after is None
+        or window.preview_pending is not None
+        or (window.preview_loader and window.preview_loader.isRunning())
+        or (window.thumbnail_worker and window.thumbnail_worker.isRunning())
+    ) and time.monotonic() < deadline:
         app.processEvents()
         time.sleep(0.02)
     assert window.compare.after is not None
+    expected = QPixmap()
+    expected.loadFromData(preview_bytes(read_image(window.queue.items[1])[0]), "PNG")
+    assert expected.toImage() == window.compare.before.toImage(), "Wrong selected photo preview"
+    window.table.verticalScrollBar().setValue(0)
+    for size, name in [((1220, 820), "queue"), ((980, 640), "queue-small")]:
+        window.resize(*size)
+        app.processEvents()
+        window.grab().save(str(args.output / f"{name}.png"))
     window.open_comparison()
     for size, name in [((1220, 820), "result"), ((980, 640), "result-small")]:
         window.resize(*size)

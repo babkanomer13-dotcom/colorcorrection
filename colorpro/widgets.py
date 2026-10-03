@@ -1,7 +1,7 @@
 """Shared, accessible desktop controls with platform-independent rendering."""
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QComboBox, QListView, QStyle, QStyledItemDelegate
 
 
@@ -89,9 +89,10 @@ def combo_box():
     return ChoiceBox()
 
 
-def navigation_icon(kind):
+def navigation_icon(kind, tint=None):
     result = QIcon()
-    for state, color in ((QIcon.State.Off, "#c3b4c0"), (QIcon.State.On, "#ff9dcc")):
+    for state, color in ((QIcon.State.Off, "#d0c8d9"), (QIcon.State.On, "#ffe1f3")):
+        color = tint or color
         pix = QPixmap(44, 44)
         pix.setDevicePixelRatio(2)
         pix.fill(Qt.GlobalColor.transparent)
@@ -100,7 +101,7 @@ def navigation_icon(kind):
         painter.setPen(QPen(QColor(color), 1.6))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if kind in {"previous", "next"}:
-            painter.setPen(QPen(QColor("#706570"), 1.8))
+            painter.setPen(QPen(QColor(tint or "#8a8eb6"), 1.8))
             x0, x1 = (13, 8) if kind == "previous" else (8, 13)
             painter.drawPolyline(QPolygonF([QPointF(x0, 5), QPointF(x1, 11), QPointF(x0, 17)]))
         elif kind == "compare":
@@ -127,6 +128,58 @@ def navigation_icon(kind):
                 painter.drawLine(QPointF(x, 3), QPointF(x, y - 2))
                 painter.drawLine(QPointF(x, y + 2), QPointF(x, 19))
                 painter.drawEllipse(QPointF(x, y), 2, 2)
+        elif kind == "folder":
+            painter.drawPolyline(
+                QPolygonF(
+                    [
+                        QPointF(3, 18),
+                        QPointF(3, 5),
+                        QPointF(9, 5),
+                        QPointF(11, 8),
+                        QPointF(19, 8),
+                        QPointF(19, 18),
+                        QPointF(3, 18),
+                    ]
+                )
+            )
+        elif kind == "processor":
+            painter.drawRoundedRect(QRectF(5, 5, 12, 12), 3, 3)
+            painter.drawEllipse(QPointF(11, 11), 3, 3)
+        elif kind == "refresh":
+            painter.drawArc(QRectF(3, 3, 16, 16), 25 * 16, 135 * 16)
+            painter.drawArc(QRectF(3, 3, 16, 16), 205 * 16, 135 * 16)
+            painter.drawPolyline(QPolygonF([QPointF(15, 6), QPointF(19, 7), QPointF(19, 3)]))
+            painter.drawPolyline(QPolygonF([QPointF(7, 16), QPointF(3, 15), QPointF(3, 19)]))
+        elif kind == "play":
+            painter.drawPolygon(QPolygonF([QPointF(7, 4), QPointF(17, 11), QPointF(7, 18)]))
+        elif kind == "plus":
+            painter.drawLine(QPointF(11, 4), QPointF(11, 18))
+            painter.drawLine(QPointF(4, 11), QPointF(18, 11))
+        elif kind == "open":
+            painter.drawPolyline(
+                QPolygonF(
+                    [
+                        QPointF(10, 4),
+                        QPointF(4, 4),
+                        QPointF(4, 18),
+                        QPointF(18, 18),
+                        QPointF(18, 12),
+                    ]
+                )
+            )
+            painter.drawPolyline(QPolygonF([QPointF(13, 3), QPointF(19, 3), QPointF(19, 9)]))
+            painter.drawLine(QPointF(10, 12), QPointF(19, 3))
+        elif kind == "fullscreen":
+            for x, y, dx, dy in ((3, 3, 5, 5), (19, 3, -5, 5), (3, 19, 5, -5), (19, 19, -5, -5)):
+                painter.drawPolyline(
+                    QPolygonF([QPointF(x + dx, y), QPointF(x, y), QPointF(x, y + dy)])
+                )
+        elif kind == "upload":
+            painter.drawLine(QPointF(11, 3), QPointF(11, 15))
+            painter.drawPolyline(QPolygonF([QPointF(5, 9), QPointF(11, 3), QPointF(17, 9)]))
+            painter.drawPolyline(
+                QPolygonF([QPointF(3, 13), QPointF(3, 20), QPointF(19, 20), QPointF(19, 13)])
+            )
         elif kind == "updates":
             painter.drawLine(QPointF(11, 3), QPointF(11, 14))
             painter.drawPolyline(QPolygonF([QPointF(6, 10), QPointF(11, 15), QPointF(16, 10)]))
@@ -135,8 +188,10 @@ def navigation_icon(kind):
             )
         else:
             painter.drawEllipse(QPointF(11, 11), 8, 8)
-            painter.drawLine(QPointF(11, 10), QPointF(11, 16))
-            painter.drawPoint(QPointF(11, 7))
+            painter.setFont(QFont("Segoe UI", 11))
+            painter.drawText(
+                QRectF(3, 2, 16, 18), Qt.AlignmentFlag.AlignCenter, "?" if kind == "help" else "i"
+            )
         painter.end()
         result.addPixmap(pix, QIcon.Mode.Normal, state)
     return result

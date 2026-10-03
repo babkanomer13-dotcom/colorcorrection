@@ -5,18 +5,20 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from colorpro import __version__, updates
 from colorpro.config import load_config
+from colorpro.design import ToggleSwitch, icon_tile
+from colorpro.widgets import navigation_icon
 
 
 class UpdateWorker(QThread):
@@ -49,20 +51,25 @@ class UpdatePage(QWidget):
         self.install_started = False
         self.setObjectName("page")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(36, 30, 36, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(28, 4, 28, 24)
+        layout.setSpacing(18)
         title = QLabel("Обновления")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        subtitle = QLabel("Новые возможности — в привычном приложении.")
+        subtitle = QLabel("Новые возможности и стабильная работа приложения.")
         subtitle.setObjectName("muted")
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
         card = QFrame()
         card.setObjectName("card")
-        content = QVBoxLayout(card)
-        content.setContentsMargins(26, 26, 26, 26)
-        content.setSpacing(18)
+        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(24, 28, 24, 28)
+        card_layout.setSpacing(24)
+        card_layout.addWidget(icon_tile("refresh", 86), 0, Qt.AlignmentFlag.AlignVCenter)
+        content = QVBoxLayout()
+        content.setSpacing(10)
+        card_layout.addLayout(content, 1)
         current = QLabel("УСТАНОВЛЕННАЯ ВЕРСИЯ")
         current.setObjectName("eyebrow")
         content.addWidget(current)
@@ -70,6 +77,7 @@ class UpdatePage(QWidget):
         version.setObjectName("title")
         content.addWidget(version)
         self.status = QLabel("Проверьте, доступна ли новая версия.")
+        self.status.setObjectName("muted")
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         content.addWidget(self.status)
@@ -84,8 +92,11 @@ class UpdatePage(QWidget):
         self.bar.setTextVisible(False)
         self.bar.hide()
         content.addWidget(self.bar)
-        buttons = QHBoxLayout()
+        buttons = QVBoxLayout()
+        buttons.addStretch()
         self.check_button = QPushButton("Проверить обновления")
+        self.check_button.setObjectName("primary")
+        self.check_button.setIcon(navigation_icon("play", "white"))
         self.check_button.clicked.connect(lambda: self.check())
         buttons.addWidget(self.check_button)
         self.action = QPushButton("Скачать и подготовить")
@@ -99,18 +110,26 @@ class UpdatePage(QWidget):
         self.cancel.hide()
         buttons.addWidget(self.cancel)
         buttons.addStretch()
-        content.addLayout(buttons)
+        card_layout.addLayout(buttons)
         layout.addWidget(card)
-        self.auto = QCheckBox("Проверять обновления автоматически")
+        self.auto = ToggleSwitch("Проверять обновления автоматически")
         self.auto.setChecked(str(owner.settings.value("auto_updates", "true")).lower() == "true")
         self.auto.toggled.connect(lambda value: owner.settings.setValue("auto_updates", value))
         layout.addWidget(self.auto)
+        notice = QFrame()
+        notice.setObjectName("notice")
+        notice_layout = QHBoxLayout(notice)
+        notice_layout.setContentsMargins(18, 16, 18, 16)
+        notice_icon = QLabel()
+        notice_icon.setPixmap(navigation_icon("info", "#9294b5").pixmap(26, 26))
+        notice_layout.addWidget(notice_icon)
         privacy = QLabel(
             "Установка начнётся только с вашего разрешения. Фотографии и настройки сохранятся."
         )
         privacy.setWordWrap(True)
         privacy.setObjectName("muted")
-        layout.addWidget(privacy)
+        notice_layout.addWidget(privacy, 1)
+        layout.addWidget(notice)
         layout.addStretch()
         for control in (self.check_button, self.action, self.cancel, self.auto):
             control.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -164,7 +183,7 @@ class UpdatePage(QWidget):
         self.bar.setValue(0)
         self.release = release
         if release is None:
-            self.status.setText("Установлена актуальная версия " + __version__)
+            self.status.setText("У вас последняя версия ColorPro.")
             return
         size = sum(row["size"] for row in release["files"]) / 1024**2
         self.status.setText("Доступна ColorPro {} · {:.1f} МБ".format(release["version"], size))

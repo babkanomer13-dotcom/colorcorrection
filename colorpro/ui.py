@@ -19,11 +19,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
-    QFont,
     QFontDatabase,
-    QIcon,
     QKeySequence,
-    QPainter,
     QPixmap,
     QShortcut,
 )
@@ -37,18 +34,30 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizeGrip,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
-from colorpro import __version__
 from colorpro.batch import Control, run_batch
+from colorpro.design import (
+    STYLE,
+    ChromeBar,
+    PhotoDelegate,
+    ProfileButton,
+    QueueHeader,
+    ThumbnailWorker,
+    brand_icon,
+    icon_tile,
+    stat_card,
+)
 from colorpro.files import EXTENSIONS, collect_inputs
 from colorpro.preview import ComparePage, PreviewWorker
 from colorpro.widgets import combo_box, navigation_icon
@@ -70,81 +79,9 @@ REASONS = {
     "no_pixel_changes": "Изменений нет: сохранён исходный вид фотографии.",
 }
 
-STYLE = """
-QWidget { font-family: 'Segoe UI'; font-size: 13px; color: #303030; }
-QMainWindow, #body, #page, QStackedWidget { background: #ffffff; }
-#sidebar { background: #251d29; border: 0; }
-#sidebar QLabel { color: #fff5fb; background: transparent; }
-#sidebar QLabel[muted='true'] { color: #c9b5c7; }
-#brand { font-size: 26px; font-weight: 700; letter-spacing: -1px; }
-#sidebar QPushButton#nav { text-align: left; padding: 13px 14px; border: 0;
-    border-radius: 10px; background: transparent; color: #cfc3ce; font-size: 14px; }
-#sidebar QPushButton#nav:hover { background: #352938; color: white; }
-#sidebar QPushButton#nav:checked { background: #513048; color: #ffc5e1; }
-#sidebar QPushButton#nav:focus { border: 1px solid #e48bb8; }
-#sidebar QLabel#navStatus { color: #eaa4c7; padding: 8px 4px; font-size: 12px; }
-QComboBox::drop-down { border: 0; width: 34px; }
-QComboBox::down-arrow { image: none; width: 0; height: 0; }
-QComboBox { background: #ffffff; border: 1px solid #dcd6dc; border-radius: 9px;
-    padding: 5px 39px 5px 12px; min-height: 22px; }
-QComboBox:hover { border-color: #b998ac; background: #fdfbfd; }
-QComboBox:on, QComboBox:focus { border-color: #d83387; }
-QComboBox:disabled { color: #aaa4aa; border-color: #ece9ec; }
-QLineEdit { background: white; border: 1px solid #dcd6dc; border-radius: 9px;
-    padding: 11px 12px; selection-background-color: #d83387; }
-QPushButton:focus, QComboBox:focus, QLineEdit:focus { border: 2px solid #ed73ae; }
-QScrollArea { border: 0; background: white; }
-QSplitter::handle { background: transparent; height: 9px; }
-QPushButton { background: white; border: 1px solid #dedede; border-radius: 8px;
-    padding: 9px 14px; font-weight: 600; min-height: 19px; }
-QPushButton:hover { background: #f6f6f6; border-color: #bdbdbd; }
-QPushButton:pressed { background: #ededed; }
-QPushButton:disabled { color: #a4a4a4; background: white; border-color: #e4e4e4; }
-QPushButton#primary { background: #d83387; color: white; border: 0;
-    font-size: 14px; padding: 12px 25px; }
-QPushButton#primary:hover { background: #b9216e; }
-QPushButton#primary:disabled { background: #e7bad0; color: #fff4f9; }
-QPushButton#small { padding: 5px 10px; min-height: 15px; }
-QLabel#title { font-size: 25px; font-weight: 700; }
-QLabel#pageTitle { font-size: 30px; font-weight: 700; color: #28232b; }
-QLabel#eyebrow { font-size: 11px; font-weight: 600; color: #a68195; letter-spacing: 2px; }
-QLabel#section { font-size: 16px; font-weight: 600; }
-QLabel#muted { color: #737373; }
-QLabel#stepNumber { color: #c42b78; background: #fcecf4; border-radius: 12px;
-    font-size: 16px; font-weight: 600; padding: 10px; }
-QCheckBox { spacing: 10px; padding: 8px 0; }
-QCheckBox::indicator { width: 18px; height: 18px; }
-QLabel#badge { color: #187044; background: white; padding: 6px 10px; border-radius: 6px; }
-QFrame#card { background: white; border: 1px solid #e4e4e4; border-radius: 12px; }
-QFrame#drop { background: white; border: 2px dashed #d5d5d5; border-radius: 12px; }
-QLabel#preview { background: white; color: #737373; border-radius: 8px; }
-QTableView { border: 0; background: white; alternate-background-color: white;
-    selection-background-color: #ededed; selection-color: #303030; gridline-color: #eeeeee; }
-QHeaderView::section { background: white; color: #737373; padding: 10px 12px;
-    border: 0; border-bottom: 1px solid #e4e4e4; font-weight: 600; }
-QProgressBar { background: #ededed; border: 0; border-radius: 4px;
-    min-height: 8px; max-height: 8px; }
-QProgressBar::chunk { background: #d83387; border-radius: 4px; }
-QToolTip { background: #322133; color: white; border: 0; padding: 8px; }
-QScrollBar:vertical { background: white; width: 10px; }
-QScrollBar::handle:vertical { background: #bdbdbd; border-radius: 4px; min-height: 30px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-"""
-
 
 def icon():
-    pix = QPixmap(128, 128)
-    pix.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pix)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor("#d83387"))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawRoundedRect(0, 0, 128, 128, 28, 28)
-    painter.setPen(QColor("white"))
-    painter.setFont(QFont("Segoe UI", 62, QFont.Weight.Bold))
-    painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, "C")
-    painter.end()
-    return QIcon(pix)
+    return brand_icon()
 
 
 def label(text, name=None, wrap=False):
@@ -175,12 +112,14 @@ def duration(seconds):
 
 
 class QueueModel(QAbstractTableModel):
-    headers = ["", "Фотография", "Источник", "Статус", "Лица", "Время"]
+    headers = ["", "Фотография", "#", "Статус", "", "Время"]
 
     def __init__(self):
         super().__init__()
         self.items = []
         self.results = {}
+        self.checked = set()
+        self.thumbnails = {}
 
     def rowCount(self, parent=None):
         return 0 if parent is not None and parent.isValid() else len(self.items)
@@ -198,13 +137,15 @@ class QueueModel(QAbstractTableModel):
         item = self.items[index.row()]
         record = self.results.get(index.row(), {})
         state = record.get("status", "queued")
+        if role == Qt.ItemDataRole.CheckStateRole and index.column() == 0:
+            return Qt.CheckState.Checked if item.key in self.checked else Qt.CheckState.Unchecked
         if role == Qt.ItemDataRole.DisplayRole:
             return [
-                str(index.row() + 1),
+                "",
                 item.name,
-                f"ZIP · {Path(item.path).name}" if item.member else "Файл",
-                STATUS.get(state, state),
-                str(record.get("corrected_faces", "—")),
+                str(index.row() + 1),
+                "●  " + STATUS.get(state, state),
+                "•••",
                 f"{record['seconds']:.1f} с" if "seconds" in record else "—",
             ][index.column()]
         if role == Qt.ItemDataRole.ToolTipRole:
@@ -221,8 +162,23 @@ class QueueModel(QAbstractTableModel):
                     "running": "#d83387",
                 }.get(state, "#907a89")
             )
-        if role == Qt.ItemDataRole.TextAlignmentRole and index.column() in {0, 4, 5}:
+        if role == Qt.ItemDataRole.TextAlignmentRole and index.column() in {0, 2, 4, 5}:
             return int(Qt.AlignmentFlag.AlignCenter)
+
+    def flags(self, index):
+        flags = super().flags(index)
+        return flags | Qt.ItemFlag.ItemIsUserCheckable if index.column() == 0 else flags
+
+    def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
+        if index.isValid() and index.column() == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            key = self.items[index.row()].key
+            if value == Qt.CheckState.Checked or value == 2:
+                self.checked.add(key)
+            else:
+                self.checked.discard(key)
+            self.dataChanged.emit(index, index)
+            return True
+        return False
 
     def add(self, items):
         if items:
@@ -235,6 +191,8 @@ class QueueModel(QAbstractTableModel):
         self.beginResetModel()
         if items is not None:
             self.items = list(items)
+            self.checked.clear()
+            self.thumbnails.clear()
         self.results.clear()
         self.endResetModel()
 
@@ -252,6 +210,7 @@ class QueueModel(QAbstractTableModel):
         }
         self.beginResetModel()
         self.items, self.results = items, results
+        self.checked.intersection_update(item.key for item in items)
         self.endResetModel()
 
 
@@ -289,11 +248,12 @@ class BatchWorker(QThread):
 
 
 class Window(QMainWindow):
-    PHOTOS, COMPARE, SETTINGS, UPDATES, HELP = range(5)
+    PHOTOS, COMPARE, SETTINGS, UPDATES, HELP, PROFILE = range(6)
 
     def __init__(self, engine_factory=None, settings=None):
         super().__init__()
-        self.setWindowTitle(f"ColorPro · {__version__}")
+        self.setWindowTitle("ColorPro")
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setWindowIcon(icon())
         self.resize(1220, 820)
         self.setMinimumSize(980, 640)
@@ -314,7 +274,10 @@ class Window(QMainWindow):
         self.review = None
         self.review_was_maximized = False
         self.batch_preview = None
+        self.thumbnail_worker = None
+        self.thumbnail_attempted = set()
         shell = QWidget()
+        shell.setObjectName("shell")
         outer = QHBoxLayout(shell)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -322,12 +285,29 @@ class Window(QMainWindow):
         sidebar = QFrame()
         self.navigation = sidebar
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(224)
+        sidebar.setFixedWidth(222)
         left = QVBoxLayout(sidebar)
-        left.setContentsMargins(16, 30, 16, 22)
+        left.setContentsMargins(14, 28, 14, 20)
         left.setSpacing(8)
-        left.addWidget(label("ColorPro", "brand"))
-        left.addSpacing(32)
+        brand = QHBoxLayout()
+        brand.setContentsMargins(8, 0, 0, 0)
+        brand.setSpacing(10)
+        mark = QLabel()
+        mark.setPixmap(brand_icon().pixmap(46, 46))
+        mark.setFixedSize(46, 46)
+        brand.addWidget(mark)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(2)
+        brand_text.addWidget(label("ColorPro", "brand"))
+        brand_text.addWidget(label("AI для ваших фото", "brandTagline"))
+        brand.addLayout(brand_text)
+        left.addLayout(brand)
+        left.addSpacing(26)
+        separator = QFrame()
+        separator.setObjectName("separator")
+        separator.setFixedHeight(1)
+        left.addWidget(separator)
+        left.addSpacing(9)
         self.nav_buttons = []
         for index, (text, kind) in enumerate(
             (
@@ -338,10 +318,6 @@ class Window(QMainWindow):
                 ("Помощь", "help"),
             )
         ):
-            if index == self.HELP:
-                left.addStretch()
-                self.nav_status = label("", "navStatus", True)
-                left.addWidget(self.nav_status)
             nav = button(text, lambda checked=False, i=index: self.show_page(i), "nav")
             nav.setCheckable(True)
             nav.setAutoExclusive(True)
@@ -351,92 +327,133 @@ class Window(QMainWindow):
             self.nav_buttons.append(nav)
         self.nav_buttons[0].setChecked(True)
         self.updates = self.nav_buttons[self.UPDATES]
-        foot = label(f"ColorPro {__version__}")
-        foot.setProperty("muted", True)
-        foot.setContentsMargins(14, 12, 0, 0)
-        left.addWidget(foot)
+        left.addStretch()
+        self.nav_status = label("", "navStatus", True)
+        left.addWidget(self.nav_status)
+        self.profile_button = ProfileButton(
+            str(self.settings.value("profile_name", "Пользователь"))
+        )
+        self.profile_button.clicked.connect(lambda: self.show_page(self.PROFILE))
+        left.addWidget(self.profile_button)
+        self.nav_buttons.append(self.profile_button)
         outer.addWidget(sidebar)
 
         body = QWidget()
         body.setObjectName("body")
         main = QVBoxLayout(body)
-        main.setContentsMargins(24, 22, 24, 18)
-        main.setSpacing(12)
+        main.setContentsMargins(28, 4, 28, 22)
+        main.setSpacing(16)
         headline = QHBoxLayout()
         titles = QVBoxLayout()
         titles.setSpacing(5)
         titles.addWidget(label("Фотографии", "pageTitle"))
+        titles.addWidget(
+            label(
+                "Добавляйте фотографии для обработки.\nJPG, PNG, TIFF, WebP, BMP и ZIP.",
+                "muted",
+                True,
+            )
+        )
         headline.addLayout(titles)
         headline.addStretch()
-        main.addLayout(headline)
-
-        toolbar = QHBoxLayout()
         self.queue_title = label("Очередь пуста", "muted")
-        toolbar.addWidget(self.queue_title)
-        toolbar.addStretch()
+        self.queue_title.hide()
         self.remove = button("Убрать", self.remove_selected, "small")
         self.remove.setToolTip("Убрать выбранные из очереди · Delete. Файлы останутся на диске.")
         self.clear = button("Очистить", self.clear_queue, "small")
-        self.add = button("+ Добавить", self.pick_files)
+        self.add = button("Добавить", self.pick_files, "primary")
+        self.add.setIcon(navigation_icon("plus", "white"))
         self.add.setToolTip("Добавить фотографии или ZIP · Ctrl+O")
-        toolbar.addWidget(self.remove)
-        toolbar.addWidget(self.clear)
-        toolbar.addWidget(self.add)
-        main.addLayout(toolbar)
+        for control in (self.remove, self.clear, self.add):
+            headline.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+        main.addLayout(headline)
 
         self.drop = QFrame()
         self.drop.setObjectName("drop")
         drop_layout = QVBoxLayout(self.drop)
-        drop_layout.setContentsMargins(20, 12, 20, 12)
+        drop_layout.setContentsMargins(16, 12, 16, 12)
         drop_layout.setSpacing(8)
         drop_layout.addStretch()
+        upload = QLabel()
+        upload.setPixmap(navigation_icon("upload", "#9296b7").pixmap(36, 36))
+        upload.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_layout.addWidget(upload)
         for text, name in [
-            ("Здесь начинается новая серия", "section"),
             ("Перетащите фотографии или ZIP в это окно", "muted"),
+            ("или нажмите «Добавить»", "muted"),
         ]:
             item = label(text, name, True)
             item.setAlignment(Qt.AlignmentFlag.AlignCenter)
             drop_layout.addWidget(item)
         self.empty_add = button("Выбрать фотографии", self.pick_files, "primary")
-        drop_layout.addWidget(self.empty_add, 0, Qt.AlignmentFlag.AlignCenter)
+        self.empty_add.hide()
         drop_layout.addStretch()
         self.table = QTableView()
         self.table.setModel(self.queue)
+        self.table.setHorizontalHeader(QueueHeader(self.queue))
+        self.table.setItemDelegateForColumn(1, PhotoDelegate(self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
-        self.table.hideColumn(2)
-        self.table.hideColumn(4)
         self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(38)
+        self.table.verticalHeader().setDefaultSectionSize(68)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for col, width in [(0, 32), (2, 80), (3, 160), (4, 62), (5, 72)]:
+        self.table.horizontalHeader().moveSection(2, 1)
+        self.table.horizontalHeader().moveSection(4, 5)
+        for col, width in [(0, 32), (2, 32), (3, 151), (4, 38), (5, 70)]:
             self.table.setColumnWidth(col, width)
-        self.table.setMinimumHeight(100)
+        self.table.setMinimumHeight(40)
+        self.table.setMaximumHeight(40)
+        self.drop.setMinimumHeight(112)
+        self.table.clicked.connect(self.queue_clicked)
+        self.table.verticalScrollBar().valueChanged.connect(self.request_thumbnails)
+        self.queue.dataChanged.connect(
+            lambda *args: self.table.horizontalHeader().viewport().update()
+        )
+        self.queue.dataChanged.connect(
+            lambda *args: self.remove.setEnabled(
+                bool(self.queue.checked or self.table.selectionModel().selectedRows())
+                and not self.busy()
+            )
+        )
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
         self.table.doubleClicked.connect(self.open_comparison)
-        self.table.hide()
         self.stack = QFrame()
         self.stack.setObjectName("queueCard")
         stack_layout = QVBoxLayout(self.stack)
-        stack_layout.setContentsMargins(1, 1, 1, 1)
-        stack_layout.addWidget(self.drop)
+        stack_layout.setContentsMargins(1, 1, 1, 12)
+        stack_layout.setSpacing(12)
         stack_layout.addWidget(self.table)
+        drop_outer = QHBoxLayout()
+        drop_outer.setContentsMargins(14, 0, 14, 0)
+        drop_outer.addWidget(self.drop)
+        stack_layout.addLayout(drop_outer, 1)
 
         main.addWidget(self.stack, 1)
         review_row = QHBoxLayout()
+        review_row.setSpacing(8)
+        self.stat_values = []
+        for text, color in (
+            ("Готово", "#59c865"),
+            ("В обработке", "#f0ad15"),
+            ("Ошибка", "#f26675"),
+            ("Всего", "#9397b7"),
+        ):
+            card, value = stat_card(text, color)
+            review_row.addWidget(card)
+            self.stat_values.append(value)
         self.summary = label("", "muted")
-        review_row.addWidget(self.summary)
+        self.summary.hide()
         review_row.addStretch()
         self.expand = button("Посмотреть до / после", self.open_comparison)
+        self.expand.setIcon(navigation_icon("compare", "#777ca4"))
         self.expand.setEnabled(False)
         review_row.addWidget(self.expand)
         self.next_attention = button("Следующий на проверку", self.select_attention, "small")
         self.next_attention.setEnabled(False)
         self.next_attention.hide()
-        review_row.addWidget(self.next_attention)
         main.addLayout(review_row)
 
         self.stage = label("", "muted", True)
@@ -451,6 +468,7 @@ class Window(QMainWindow):
         controls = QHBoxLayout()
         self.counter = label("", "muted")
         controls.addWidget(self.counter)
+        controls.addWidget(self.next_attention)
         controls.addStretch()
         self.open_folder = button("Результаты", self.open_results)
         self.open_folder.setEnabled(False)
@@ -459,6 +477,7 @@ class Window(QMainWindow):
         self.pause.hide()
         self.cancel.hide()
         self.start = button("Обработать серию", self.start_batch, "primary")
+        self.start.setIcon(navigation_icon("play", "white"))
         self.start.setEnabled(False)
         for widget in (self.open_folder, self.pause, self.cancel, self.start):
             controls.addWidget(widget)
@@ -477,8 +496,20 @@ class Window(QMainWindow):
         self.update_page = UpdatePage(self)
         self.pages.addWidget(self.wrap_page(self.update_page))
         self.pages.addWidget(self.help_page())
-        outer.addWidget(self.pages, 1)
+        self.pages.addWidget(self.profile_page())
+        workspace = QWidget()
+        workspace.setObjectName("workspace")
+        workspace_layout = QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(0)
+        self.chrome = ChromeBar(self)
+        workspace_layout.addWidget(self.chrome)
+        workspace_layout.addWidget(self.pages, 1)
+        outer.addWidget(workspace, 1)
         self.setCentralWidget(shell)
+        self.resize_grip = QSizeGrip(self)
+        self.resize_grip.setFixedSize(16, 16)
+        self.resize_grip.raise_()
         self.sync_review()
         QShortcut(QKeySequence("F11"), self).activated.connect(self.toggle_review_fullscreen)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.escape_page)
@@ -519,6 +550,66 @@ class Window(QMainWindow):
         self.update_page.idle.connect(self.update_idle)
         QTimer.singleShot(8000, self.auto_check_updates)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "resize_grip"):
+            self.resize_grip.move(self.width() - 17, self.height() - 17)
+            self.resize_grip.setVisible(not self.isMaximized() and not self.isFullScreen())
+
+    def queue_clicked(self, index):
+        if index.column() != 4:
+            return
+        menu = QMenu(self)
+        menu.addAction("Посмотреть до / после", self.open_comparison)
+        action = menu.addAction("Открыть результат", self.open_selected)
+        action.setEnabled(bool(self.queue.results.get(index.row(), {}).get("output")))
+        action = menu.addAction("Убрать из очереди", self.remove_selected)
+        action.setEnabled(not self.busy())
+        menu.exec(self.table.viewport().mapToGlobal(self.table.visualRect(index).bottomRight()))
+
+    def request_thumbnails(self, *args):
+        if (
+            self.close_requested
+            or self.busy()
+            or (self.thumbnail_worker and self.thumbnail_worker.isRunning())
+        ):
+            return
+        first = max(0, self.table.rowAt(0))
+        last = self.table.rowAt(self.table.viewport().height() - 1)
+        last = min(len(self.queue.items), max(first + 12, last + 1))
+        items = [
+            item
+            for item in self.queue.items[first:last]
+            if item.key not in self.thumbnail_attempted
+        ]
+        if not items:
+            return
+        self.thumbnail_attempted.update(item.key for item in items)
+        self.thumbnail_worker = ThumbnailWorker(items)
+        self.thumbnail_worker.loaded.connect(self.thumbnail_loaded)
+        self.thumbnail_worker.finished.connect(self.thumbnail_finished)
+        self.thumbnail_worker.start()
+
+    def thumbnail_loaded(self, key, data, dimensions):
+        pix = QPixmap()
+        if data:
+            pix.loadFromData(data)
+        self.queue.thumbnails[key] = (pix if not pix.isNull() else None, dimensions)
+        while len(self.queue.thumbnails) > 256:
+            removed = next(iter(self.queue.thumbnails))
+            self.queue.thumbnails.pop(removed)
+            self.thumbnail_attempted.discard(removed)
+        for row, item in enumerate(self.queue.items):
+            if item.key == key:
+                self.queue.dataChanged.emit(self.queue.index(row, 1), self.queue.index(row, 1))
+                break
+
+    def thumbnail_finished(self):
+        if self.close_requested:
+            self.close()
+        else:
+            self.request_thumbnails()
+
     def wrap_page(self, content):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -530,8 +621,8 @@ class Window(QMainWindow):
         page = QWidget()
         page.setObjectName("page")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(36, 30, 36, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(28, 4, 28, 24)
+        layout.setSpacing(14)
         layout.addWidget(label(title, "pageTitle"))
         layout.addWidget(label(subtitle, "muted", True))
         return page, layout
@@ -542,9 +633,13 @@ class Window(QMainWindow):
         )
         processing = QFrame()
         processing.setObjectName("card")
-        form = QVBoxLayout(processing)
-        form.setContentsMargins(24, 22, 24, 24)
-        form.setSpacing(12)
+        processing_row = QHBoxLayout(processing)
+        processing_row.setContentsMargins(20, 20, 20, 20)
+        processing_row.setSpacing(16)
+        processing_row.addWidget(icon_tile("processor"), 0, Qt.AlignmentFlag.AlignTop)
+        form = QVBoxLayout()
+        form.setSpacing(9)
+        processing_row.addLayout(form, 1)
         form.addWidget(label("Обработка", "section"))
         form.addWidget(label("Устройство", "muted"))
         self.device = combo_box()
@@ -562,9 +657,13 @@ class Window(QMainWindow):
         layout.addWidget(processing)
         saving = QFrame()
         saving.setObjectName("card")
-        save = QVBoxLayout(saving)
-        save.setContentsMargins(24, 22, 24, 24)
-        save.setSpacing(12)
+        saving_row = QHBoxLayout(saving)
+        saving_row.setContentsMargins(20, 20, 20, 20)
+        saving_row.setSpacing(16)
+        saving_row.addWidget(icon_tile("folder"), 0, Qt.AlignmentFlag.AlignTop)
+        save = QVBoxLayout()
+        save.setSpacing(9)
+        saving_row.addLayout(save, 1)
         save.addWidget(label("Сохранение", "section"))
         save.addWidget(label("Формат результата", "muted"))
         self.format = combo_box()
@@ -643,6 +742,31 @@ class Window(QMainWindow):
         )
         layout.addStretch()
         return self.wrap_page(page)
+
+    def profile_page(self):
+        page, layout = self.page_layout("Профиль", "Ваше пространство в ColorPro.")
+        card = QFrame()
+        card.setObjectName("card")
+        form = QVBoxLayout(card)
+        form.setContentsMargins(24, 24, 24, 24)
+        form.setSpacing(12)
+        form.addWidget(label("Как к вам обращаться?", "section"))
+        form.addWidget(label("Имя в приложении", "muted"))
+        self.profile_name = QLineEdit(str(self.settings.value("profile_name", "")))
+        self.profile_name.setPlaceholderText("Ваше имя")
+        self.profile_name.setMaxLength(40)
+        self.profile_name.setAccessibleName("Имя в локальном профиле")
+        self.profile_name.textChanged.connect(self.save_profile)
+        form.addWidget(self.profile_name)
+        form.addWidget(label("Имя сохраняется только на этом компьютере.", "muted", True))
+        layout.addWidget(card)
+        layout.addStretch()
+        return self.wrap_page(page)
+
+    def save_profile(self, text):
+        name = text.strip()
+        self.settings.setValue("profile_name", name)
+        self.profile_button.set_name(name)
 
     def show_page(self, index):
         if self.isFullScreen() and index != self.COMPARE:
@@ -739,6 +863,7 @@ class Window(QMainWindow):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.set_busy(False)
+        self.request_thumbnails()
         if self.close_requested:
             self.close()
 
@@ -746,16 +871,22 @@ class Window(QMainWindow):
         count = len(self.queue.items)
         self.queue_title.setText(f"В очереди: {count}" if count else "Очередь пуста")
         self.counter.setText(f"{count} фотографий" if count else "")
-        self.drop.setVisible(not count)
-        self.table.setVisible(bool(count))
+        self.drop.show()
+        self.table.show()
+        self.table.setFixedHeight(40 + min(count, 2) * 68)
         self.start.setEnabled(bool(count) and not self.busy())
         self.clear.setEnabled(bool(count) and not self.busy())
         self.update_summary()
+        self.request_thumbnails()
 
     def update_summary(self):
         states = [record.get("status") for record in self.queue.results.values()]
         attention = sum(s in {"needs_attention", "partial"} for s in states)
         errors = states.count("error")
+        for index, count in enumerate(
+            (states.count("corrected"), states.count("running"), errors, len(self.queue.items)),
+        ):
+            self.stat_values[index].setText(str(count))
         self.summary.setText(
             f"Готово: {states.count('corrected')}  ·  Проверить: {attention}  ·  Ошибки: {errors}"
             if self.queue.items
@@ -781,6 +912,10 @@ class Window(QMainWindow):
         if self.busy():
             return
         selected = {i.row() for i in self.table.selectionModel().selectedRows()}
+        if self.queue.checked:
+            selected = {
+                i for i, item in enumerate(self.queue.items) if item.key in self.queue.checked
+            }
         if not selected:
             return
         self.queue.remove_rows(selected)
@@ -793,6 +928,7 @@ class Window(QMainWindow):
     def clear_queue(self):
         if not self.busy():
             self.queue.reset([])
+            self.thumbnail_attempted.clear()
             self.previews.clear()
             self.reset_preview()
             self.update_queue()
@@ -887,6 +1023,7 @@ class Window(QMainWindow):
             self.stage.setText("Продолжаем обработку…")
         elif kind == "start":
             self.queue.update(event["index"], {"status": "running"})
+            self.update_summary()
             self.stage.setText(f"{event['index'] + 1} / {len(self.queue.items)} · {event['text']}")
             self.table.scrollTo(self.queue.index(event["index"], 0))
             if not self.table.selectionModel().selectedRows():
@@ -948,6 +1085,7 @@ class Window(QMainWindow):
         self.start.show()
         self.set_busy(False)
         self.selection_changed()
+        self.request_thumbnails()
         if self.close_requested:
             self.close()
 
@@ -977,7 +1115,7 @@ class Window(QMainWindow):
         index = selected[0].row() if selected else -1
         record = self.queue.results.get(index, {})
         self.open_photo.setEnabled(bool(record.get("output")))
-        self.remove.setEnabled(bool(selected) and not self.busy())
+        self.remove.setEnabled(bool(selected or self.queue.checked) and not self.busy())
         if index < 0:
             self.reset_preview()
             return
@@ -1097,11 +1235,13 @@ class Window(QMainWindow):
         else:
             self.review_was_maximized = self.isMaximized()
             self.navigation.hide()
+            self.chrome.hide()
             self.review.fullscreen.setText("Вернуться · Esc")
             self.showFullScreen()
 
     def leave_review_fullscreen(self):
         self.navigation.show()
+        self.chrome.show()
         self.review.fullscreen.setText("На весь экран · F11")
         self.showMaximized() if self.review_was_maximized else self.showNormal()
 
@@ -1159,6 +1299,11 @@ class Window(QMainWindow):
                     self.importer.requestInterruption()
             event.ignore()
         else:
+            if self.thumbnail_worker and self.thumbnail_worker.isRunning():
+                self.close_requested = True
+                self.thumbnail_worker.requestInterruption()
+                event.ignore()
+                return
             if self.preview_loader and self.preview_loader.isRunning():
                 self.close_requested = True
                 self.preview_pending = None

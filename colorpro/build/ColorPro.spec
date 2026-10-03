@@ -9,6 +9,7 @@ stage = Path(os.environ['COLORPRO_STAGE']).resolve()
 payload = stage / 'payload'
 legacy = json.loads((payload / 'manifest.json').read_text('utf8'))['platform'] == 'win7'
 data = [(str(payload), 'payload'), (str(stage / 'third-party-licenses'), 'third-party-licenses')]
+data.append((str(stage / 'colorpro/assets'), 'colorpro/assets'))
 for name in ['README-SETUP.txt', 'README-WIN7.txt', 'THIRD_PARTY_NOTICES.txt']:
     data.append((str(stage / name), '.'))
 for name in ['torch', 'numpy', 'Pillow', 'opencv-python-headless',

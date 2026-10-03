@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -125,10 +125,10 @@ class CompareView(QWidget):
     def panes(self):
         if self.mode:
             return [QRectF(0, 34, self.width(), max(1, self.height() - 34))]
-        half = (self.width() - 2) / 2
+        half = (self.width() - 20) / 2
         return [
             QRectF(0, 34, half, max(1, self.height() - 34)),
-            QRectF(half + 2, 34, half, max(1, self.height() - 34)),
+            QRectF(half + 20, 34, half, max(1, self.height() - 34)),
         ]
 
     def drawn_size(self):
@@ -163,13 +163,13 @@ class CompareView(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor("#ffffff"))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor("#f6f6fd"))
         panes = self.panes()
-        captions = ["Исходник", "Результат"]
+        captions = ["Исходное", "Результат"]
         for index in range(2):
             header = QRectF(index * self.width() / 2, 0, self.width() / 2, 34)
-            painter.fillRect(header, QColor("#ffffff"))
-            painter.setPen(QColor("#444444"))
+            painter.setPen(QColor("#575975"))
             painter.drawText(header, Qt.AlignmentFlag.AlignCenter, captions[index])
         if self.before is None:
             painter.setPen(QColor("#737373"))
@@ -182,11 +182,14 @@ class CompareView(QWidget):
         for index, pane in enumerate(panes):
             pixmap = self.before if not index else self.after
             painter.save()
-            painter.setClipRect(pane)
+            clip = QPainterPath()
+            clip.addRoundedRect(pane, 10, 10)
+            painter.setClipPath(clip)
+            painter.fillRect(pane, QColor("#292929"))
             if pixmap is not None:
                 painter.drawPixmap(self.target_rect(pane), pixmap, QRectF(pixmap.rect()))
             else:
-                painter.setPen(QColor("#737373"))
+                painter.setPen(QColor("#c8c8c8"))
                 painter.drawText(
                     pane.adjusted(20, 0, -20, 0),
                     Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
@@ -197,13 +200,17 @@ class CompareView(QWidget):
             pane = panes[0]
             divider = int(self.width() * self.position)
             painter.save()
-            painter.setClipRect(QRectF(divider, pane.top(), self.width() - divider, pane.height()))
+            clip = QPainterPath()
+            clip.addRoundedRect(pane, 10, 10)
+            painter.setClipPath(clip)
+            painter.setClipRect(
+                QRectF(divider, pane.top(), self.width() - divider, pane.height()),
+                Qt.ClipOperation.IntersectClip,
+            )
             painter.drawPixmap(self.target_rect(pane), self.after, QRectF(self.after.rect()))
             painter.restore()
             painter.setPen(QPen(QColor("#737373"), 2))
             painter.drawLine(divider, 34, divider, self.height())
-        elif not self.mode:
-            painter.fillRect(QRectF(panes[0].right(), 0, 2, self.height()), QColor("#e4e4e4"))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -259,17 +266,24 @@ class ComparePage(QWidget):
         self.owner = owner
         self.setObjectName("page")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 18)
+        layout.setContentsMargins(28, 4, 28, 20)
         layout.setSpacing(12)
         heading = QHBoxLayout()
         title = QLabel("До / после")
         title.setObjectName("pageTitle")
-        heading.addWidget(title)
+        titles = QVBoxLayout()
+        titles.setSpacing(5)
+        titles.addWidget(title)
+        subtitle = QLabel("Сравните исходное фото и результат обработки.")
+        subtitle.setObjectName("muted")
+        titles.addWidget(subtitle)
+        heading.addLayout(titles)
         heading.addStretch()
         self.attention = QPushButton("Следующий на проверку")
         self.attention.clicked.connect(owner.select_attention)
         heading.addWidget(self.attention)
         self.open_file = QPushButton("Открыть результат")
+        self.open_file.setIcon(navigation_icon("open", "#585b84"))
         self.open_file.setEnabled(False)
         self.open_file.clicked.connect(owner.open_selected)
         heading.addWidget(self.open_file)
@@ -278,6 +292,7 @@ class ComparePage(QWidget):
         self.previous = QPushButton()
         self.previous.setIcon(navigation_icon("previous"))
         self.previous.setIconSize(QSize(18, 18))
+        self.previous.setFixedWidth(34)
         self.previous.setAccessibleName("Предыдущая фотография")
         self.previous.setToolTip("Предыдущая фотография")
         self.previous.clicked.connect(lambda: owner.select_relative(-1))
@@ -296,6 +311,7 @@ class ComparePage(QWidget):
         self.next = QPushButton()
         self.next.setIcon(navigation_icon("next"))
         self.next.setIconSize(QSize(18, 18))
+        self.next.setFixedWidth(34)
         self.next.setAccessibleName("Следующая фотография")
         self.next.setToolTip("Следующая фотография")
         self.next.clicked.connect(lambda: owner.select_relative(1))
@@ -329,12 +345,8 @@ class ComparePage(QWidget):
         self.detail.setMaximumHeight(40)
         self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.detail)
         toolbar = QHBoxLayout()
-        hint = QLabel("Колесо мыши — масштаб")
-        hint.setObjectName("muted")
-        toolbar.addWidget(hint)
-        toolbar.addStretch()
+        toolbar.addWidget(self.detail, 1)
         toolbar.addWidget(self.zoom_label)
         self.zoom_controls = []
         for title, callback in (
@@ -343,10 +355,14 @@ class ComparePage(QWidget):
             ("По размеру", self.view.reset_zoom),
         ):
             control = QPushButton(title)
+            if title in ("−", "+"):
+                control.setObjectName("square")
+                control.setFixedWidth(34)
             control.clicked.connect(callback)
             toolbar.addWidget(control)
             self.zoom_controls.append(control)
         self.fullscreen = QPushButton("На весь экран · F11")
+        self.fullscreen.setIcon(navigation_icon("fullscreen", "#585b84"))
         self.fullscreen.clicked.connect(owner.toggle_review_fullscreen)
         toolbar.addWidget(self.fullscreen)
         layout.addLayout(toolbar)
