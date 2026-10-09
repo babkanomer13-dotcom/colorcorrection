@@ -10,7 +10,7 @@ from dataclasses import asdict
 from datetime import datetime
 
 from colorpro import __version__
-from colorpro.files import output_name, preview_bytes, read_image, save_result
+from colorpro.files import output_path, preview_bytes, read_image, save_result
 from colorpro.safety import validate_output_parent
 
 
@@ -104,7 +104,7 @@ def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=N
                 if report["device"] != engine.device_name:
                     report["device"] = engine.device_name
                     emit(dict(type="ready", device=engine.device_name))
-                result = folder / output_name(index + 1, item, fmt)
+                result = output_path(folder, item, fmt)
                 save_result(result, pixels, metadata, fmt)
                 record.update(
                     stats,

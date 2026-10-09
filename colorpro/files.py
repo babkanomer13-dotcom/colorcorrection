@@ -229,11 +229,23 @@ def read_image(item):
     return rgb, metadata, digest
 
 
-def output_name(number, item, fmt):
+def output_name(item, fmt):
     forbidden = re.escape('<>:"/|?*' + chr(92))
     stem = re.sub("[" + forbidden + r"\x00-\x1f]", "_", Path(item.name).stem)
-    stem = stem.strip(" .")[:100] or "photo"
-    return f"{number:05d}_{stem}_color.{'jpg' if fmt == 'JPEG' else 'png'}"
+    stem = stem.strip(" .")[:240] or "photo"
+    return f"{stem}_с.{'jpg' if fmt == 'JPEG' else 'png'}"
+
+
+def output_path(folder, item, fmt):
+    """Keep original_с names; identical basenames go into numbered subfolders."""
+    name = output_name(item, fmt)
+    candidate = Path(folder) / name
+    number = 1
+    while candidate.exists() or candidate.with_suffix(candidate.suffix + ".partial").exists():
+        number += 1
+        candidate = Path(folder) / str(number) / name
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    return candidate
 
 
 def save_result(path, pixels, metadata, fmt):

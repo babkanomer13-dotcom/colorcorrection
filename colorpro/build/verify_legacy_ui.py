@@ -93,10 +93,24 @@ def main():
     window.escape_page()
     assert not window.isFullScreen()
     result = Path(window.queue.results[0]["output"])
+    assert result.name == "synthetic_с.png"
+    pump(lambda: not window.preview_loader.isRunning())
+    window.review.editor.begin()
+    pump(lambda: window.review.editor.session is not None and not window.review.editor.running())
+    window.review.editor.controls["gamma"][0].setValue(1.25)
+    window.review.editor.render_preview()
+    app.processEvents()
+    window.grab().save(str(output / "levels.png"))
+    window.review.editor.save_result()
+    pump(lambda: not window.review.editor.active and not window.review.editor.running())
+    with Image.open(result) as edited:
+        assert np.asarray(edited).mean() > 100
+    with Image.open(photo) as untouched:
+        assert np.asarray(untouched).mean() == 100
     window.remove_selected()
     assert not window.queue.items and result.is_file() and photo.is_file()
     window.close()
-    print("PASS: Qt5 dropdowns / import / queue / process / preview / zoom / large view / remove")
+    print("PASS: Qt5 dropdowns / queue / preview / manual levels save / original safe / remove")
 
 
 if __name__ == "__main__":

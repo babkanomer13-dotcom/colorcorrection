@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from colorpro.config import load_config, verify_runtime
+from colorpro.detector_path import compatible_model_path
 
 
 def inventory():
@@ -176,7 +177,8 @@ class Engine:
                 raise RuntimeError(
                     "Не удалось запустить V39 на GPU. Выберите CPU. " + "; ".join(errors)
                 )
-            self.detector = SourceFaceDetector(Path(config["detector"]))
+            with compatible_model_path(config["detector"]) as detector_path:
+                self.detector = SourceFaceDetector(detector_path)
             self.weight_sha256 = config["checkpoint_sha256"]
             self.recipe_sha256 = hashlib.sha256(
                 json.dumps(config["bindings"], sort_keys=True).encode()

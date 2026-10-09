@@ -93,6 +93,27 @@ def main():
         app.processEvents()
         window.grab().save(str(args.output / f"{name}.png"))
     window.resize(1220, 820)
+    window.review.editor.begin()
+    deadline = time.monotonic() + 30
+    while (
+        window.review.editor.session is None or window.review.editor.running()
+    ) and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.02)
+    assert window.review.editor.session is not None, window.review.editor.status.text()
+    window.review.editor.controls["gamma"][0].setValue(1.12)
+    window.review.editor.render_preview()
+    for size, name in [((1220, 820), "levels"), ((980, 640), "levels-small")]:
+        window.resize(*size)
+        app.processEvents()
+        assert window.width() == size[0], "Levels panel expanded the minimum window width"
+        window.grab().save(str(args.output / f"{name}.png"))
+    window.review.editor.cancel_edit()
+    deadline = time.monotonic() + 30
+    while window.preview_loader.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.02)
+    window.resize(1220, 820)
     window.preview_mode.setCurrentIndex(1)
     app.processEvents()
     window.grab().save(str(args.output / "divider.png"))

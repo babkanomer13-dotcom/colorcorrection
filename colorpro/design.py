@@ -92,6 +92,13 @@ QProgressBar { background: #e6e5f1; border: 0; border-radius: 4px;
 QProgressBar::chunk { background: #d52995; border-radius: 4px; }
 QToolTip { background: #302a3c; color: white; border: 0; padding: 8px; }
 QCheckBox { spacing: 10px; background: transparent; }
+#levelsPanel { background: #fdfdff; border-radius: 10px; }
+QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #dfe1f1;
+ border-radius: 5px; padding: 4px; min-height: 22px; }
+QSlider::groove:horizontal { height: 5px; background: #dedde8; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #b66aaf; border-radius: 2px; }
+QSlider::handle:horizontal { width: 12px; margin: -5px 0; background: #b62985;
+ border: 1px solid white; border-radius: 6px; }
 QScrollBar:vertical { background: transparent; width: 9px; }
 QScrollBar::handle:vertical { background: #c8c5d9; border-radius: 4px; min-height: 28px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }

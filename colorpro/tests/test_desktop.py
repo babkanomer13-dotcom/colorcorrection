@@ -520,3 +520,50 @@ def test_profile_and_sidebar_order(app, tmp_path):
     reopened = Window(settings=settings)
     assert reopened.profile_name.text() == reopened.profile_button.name == "Анна Иванова"
     reopened.close()
+
+
+def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
+    from colorpro.ui import Window
+
+    source, _ = photo
+    original = source.read_bytes()
+    window = Window(
+        engine_factory=FakeEngine,
+        settings=QSettings(str(tmp_path / "edit.ini"), QSettings.Format.IniFormat),
+    )
+    window.show()
+    window.import_files([str(source)])
+    pump(app, lambda: len(window.queue.items) == 1 and not window.busy())
+    window.output.setText(str(tmp_path / "results"))
+    window.start_batch()
+    pump(app, lambda: window.last_report is not None and not window.busy())
+    window.open_comparison()
+    pump(app, lambda: window.compare.after is not None and not window.preview_loader.isRunning())
+    output = Path(window.queue.results[0]["output"])
+    assert output.name == "Фото с пробелом_с.png"
+    initial = output.read_bytes()
+    editor = window.review.editor
+    editor.begin()
+    pump(app, lambda: editor.session is not None and not editor.running())
+    assert editor.active and window.busy() and not window.table.isEnabled()
+    editor.controls["gamma"][0].setValue(1.30)
+    editor.render_preview()
+    edited = window.compare.after.toImage()
+    editor.preview.setChecked(False)
+    assert edited != window.compare.after.toImage()
+    assert output.read_bytes() == initial
+    editor.cancel_edit()
+    pump(app, lambda: not window.preview_loader.isRunning())
+    assert not window.busy() and output.read_bytes() == initial
+    editor.begin()
+    pump(app, lambda: editor.session is not None and not editor.running())
+    editor.channel.setCurrentIndex(1)
+    editor.controls["gamma"][0].setValue(0.89)
+    editor.save_result()
+    pump(app, lambda: not editor.active and not editor.running())
+    assert output.read_bytes() != initial and source.read_bytes() == original
+    assert window.queue.results[0]["manually_edited"]
+    assert window.last_report["records"][0]["manual_levels"][1]["gamma"] == 0.89
+    assert window.table.isEnabled() and window.start.isEnabled()
+    window.close()
+    pump(app, lambda: not window.isVisible())

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from colorpro.files import collect_inputs, preview_bytes, read_image
+from colorpro.levels_panel import LevelsPanel
 from colorpro.widgets import combo_box, navigation_icon
 
 
@@ -68,6 +69,7 @@ class CompareView(QWidget):
 
     zoom_changed = Signal(float)
     expand_requested = Signal()
+    pixel_picked = Signal(float, float)
 
     def __init__(self):
         super().__init__()
@@ -77,6 +79,7 @@ class CompareView(QWidget):
         self.zoom = 1.0
         self.center = QPointF(0.5, 0.5)
         self.drag_start = None
+        self.picking = False
         self.message = "Выберите фотографию в очереди"
         self.setMinimumSize(200, 145)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -213,6 +216,21 @@ class CompareView(QWidget):
             painter.drawLine(divider, 34, divider, self.height())
 
     def mousePressEvent(self, event):
+        if self.picking:
+            if self.after is not None and event.button() == Qt.MouseButton.LeftButton:
+                pane = self.panes()[-1]
+                target = self.target_rect(pane)
+                point = event.position()
+                if (
+                    pane.contains(point)
+                    and target.contains(point)
+                    and (not self.mode or point.x() >= self.width() * self.position)
+                ):
+                    self.pixel_picked.emit(
+                        (point.x() - target.left()) / target.width(),
+                        (point.y() - target.top()) / target.height(),
+                    )
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus()
             self.drag_start = event.position()
@@ -282,6 +300,10 @@ class ComparePage(QWidget):
         self.attention = QPushButton("Следующий на проверку")
         self.attention.clicked.connect(owner.select_attention)
         heading.addWidget(self.attention)
+        self.levels_button = QPushButton("Уровни")
+        self.levels_button.setEnabled(False)
+        self.levels_button.clicked.connect(lambda: self.editor.begin())
+        heading.addWidget(self.levels_button)
         self.open_file = QPushButton("Открыть результат")
         self.open_file.setIcon(navigation_icon("open", "#585b84"))
         self.open_file.setEnabled(False)
@@ -337,7 +359,12 @@ class ComparePage(QWidget):
         self.view.expand_requested.connect(owner.toggle_review_fullscreen)
         self.zoom_label = QLabel("1.0×")
         self.view.zoom_changed.connect(lambda value: self.zoom_label.setText(f"{value:.1f}×"))
-        layout.addWidget(self.view, 1)
+        workspace = QHBoxLayout()
+        workspace.addWidget(self.view, 1)
+        self.editor = LevelsPanel(owner)
+        self.view.pixel_picked.connect(self.editor.picked)
+        workspace.addWidget(self.editor)
+        layout.addLayout(workspace, 1)
         self.detail = QLabel("")
         self.detail.setObjectName("muted")
         self.detail.setTextFormat(Qt.TextFormat.PlainText)
@@ -383,5 +410,20 @@ class ComparePage(QWidget):
         self.next.setEnabled(0 <= index < total - 1)
         self.count.setText(f"{index + 1} / {total}")
         self.attention.setVisible(owner.next_attention.isEnabled())
+        self.attention.setEnabled(owner.next_attention.isEnabled())
         for control in self.zoom_controls:
             control.setEnabled(self.view.before is not None)
+        editing = self.editor.active
+        loading = bool(owner.preview_loader and owner.preview_loader.isRunning())
+        output = owner.queue.results.get(index, {}).get("output")
+        self.levels_button.setEnabled(bool(output) and not owner.busy() and not loading)
+        if editing:
+            for control in (
+                self.previous,
+                self.next,
+                self.photos,
+                self.faces,
+                self.attention,
+                self.open_file,
+            ):
+                control.setEnabled(False)

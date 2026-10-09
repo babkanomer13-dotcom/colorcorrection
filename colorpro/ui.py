@@ -46,7 +46,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from colorpro.batch import Control, run_batch
+from colorpro.batch import Control, run_batch, write_json
 from colorpro.design import (
     STYLE,
     ChromeBar,
@@ -711,6 +711,7 @@ class Window(QMainWindow):
                 "03",
                 "Сравните и сохраните",
                 "Откройте вкладку «До / после», чтобы сравнить фотографии. "
+                "Кнопка «Уровни» позволяет подправить цвет и яркость результата и сохранить его. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
         ):
@@ -769,6 +770,8 @@ class Window(QMainWindow):
         self.profile_button.set_name(name)
 
     def show_page(self, index):
+        if self.review is not None and self.review.editor.active and index != self.COMPARE:
+            return
         if self.isFullScreen() and index != self.COMPARE:
             self.leave_review_fullscreen()
         self.pages.setCurrentIndex(index)
@@ -804,6 +807,7 @@ class Window(QMainWindow):
     def busy(self):
         return bool(
             self.install_pending
+            or (self.review is not None and self.review.editor.active)
             or (self.worker and self.worker.isRunning())
             or (self.importer and self.importer.isRunning())
         )
@@ -1111,6 +1115,8 @@ class Window(QMainWindow):
             )
 
     def selection_changed(self, *args):
+        if self.review is not None and self.review.editor.active:
+            return
         selected = self.table.selectionModel().selectedRows()
         index = selected[0].row() if selected else -1
         record = self.queue.results.get(index, {})
@@ -1183,6 +1189,7 @@ class Window(QMainWindow):
         self.preview_loader.start()
 
     def preview_finished(self):
+        self.sync_review()
         if self.close_requested:
             self.close()
         else:
@@ -1200,6 +1207,24 @@ class Window(QMainWindow):
         if error:
             self.preview_detail.setText(f"Предпросмотр: {error}")
         self.sync_review()
+        if self.review.editor.active:
+            self.review.editor.render_preview()
+
+    def manual_result_saved(self, index, data):
+        changes = dict(data, status="corrected", reason=None, manually_edited=True)
+        self.queue.update(index, changes)
+        if self.last_report is not None:
+            for record in self.last_report["records"]:
+                if record["index"] == index:
+                    record.update(changes)
+            rows = self.last_report["records"]
+            self.last_report["corrected"] = sum(row["status"] == "corrected" for row in rows)
+            self.last_report["attention"] = sum(row["status"] == "needs_attention" for row in rows)
+            try:
+                write_json(Path(self.last_report["output"]) / "report.json", self.last_report)
+            except OSError as error:
+                self.error(f"Фотография сохранена, но отчёт обновить не удалось: {error}")
+        self.update_summary()
 
     def cache_preview(self, key, pair):
         self.previews[key] = pair
@@ -1216,6 +1241,8 @@ class Window(QMainWindow):
             self.review.sync_controls()
 
     def select_photo(self, index):
+        if self.review.editor.active:
+            return
         if 0 <= index < len(self.queue.items):
             selected = self.table.selectionModel().selectedRows()
             if not selected or selected[0].row() != index:
@@ -1276,6 +1303,22 @@ class Window(QMainWindow):
             event.acceptProposedAction()
 
     def closeEvent(self, event):
+        if self.review.editor.active:
+            if self.review.editor.running():
+                self.review.editor.status.setText("Дождитесь завершения текущей операции.")
+                event.ignore()
+                return
+            answer = QMessageBox.question(
+                self,
+                "Закрыть уровни?",
+                "Закрыть без сохранения ручных изменений?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+            self.review.editor.end()
         if self.update_page.running():
             self.close_requested = True
             self.update_page.worker.requestInterruption()
