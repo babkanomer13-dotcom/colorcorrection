@@ -1,8 +1,8 @@
 ColorPro logo
 =============
-logo.png is the final glossy pink/purple mark supplied by the user on 2026-10-10.
+logo.png is the latest glossy pink/purple triangular ribbon supplied on 2026-10-10.
 It is copied byte-for-byte from the supplied transparent PNG: no redraw,
-recoloring, background removal or contour changes. It supersedes the blue mark.
+recoloring, background removal or contour changes. It supersedes both earlier marks.
 
 logo.ico is derived from logo.png for Windows executable, installer and shortcuts.
 Regenerate it with: python -m colorpro.build.brand_assets
