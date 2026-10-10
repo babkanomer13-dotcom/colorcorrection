@@ -22,9 +22,18 @@ def icon_bytes(logo):
 
 def validate_icon(path):
     """Never accidentally build the old icon from a previous QA directory."""
-    expected = icon_bytes(ASSETS / "logo.png")
-    if Path(path).read_bytes() != expected:
-        raise ValueError("Stale ColorPro icon: run python -m colorpro.build.brand_assets")
+    expected = Image.open(io.BytesIO(icon_bytes(ASSETS / "logo.png")))
+    try:
+        with expected, Image.open(path) as actual:
+            if actual.format != "ICO" or actual.ico.sizes() != expected.ico.sizes():
+                raise ValueError("Wrong icon format or sizes")
+            # PNG compression bytes may differ between the legacy and modern
+            # Pillow/zlib versions. Compare every decoded RGBA frame instead.
+            for size in expected.ico.sizes():
+                if actual.ico.getimage(size).tobytes() != expected.ico.getimage(size).tobytes():
+                    raise ValueError("Wrong icon pixels")
+    except (OSError, ValueError) as exc:
+        raise ValueError("Stale ColorPro icon: run python -m colorpro.build.brand_assets") from exc
 
 
 def main():
