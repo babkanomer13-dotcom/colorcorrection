@@ -2,8 +2,7 @@ $ErrorActionPreference = 'Stop'
 $colorproRoot = Split-Path -Parent $PSScriptRoot
 $colorproPython = Join-Path $colorproRoot '.venv\Scripts\pythonw.exe'
 $colorproEntry = Join-Path $colorproRoot 'ColorPro.pyw'
-$colorproConfig = Get-Content -Raw -LiteralPath (Join-Path $colorproRoot 'configs\local.colorpro.json') | ConvertFrom-Json
-$colorproIcon = Join-Path $colorproConfig.state_root 'qa\ui-final\colorpro.ico'
+$colorproIcon = Join-Path $PSScriptRoot 'assets\logo.ico'
 $colorproDesktop = [Environment]::GetFolderPath('Desktop')
 $colorproLink = Join-Path $colorproDesktop 'ColorPro.lnk'
 if (-not (Test-Path -LiteralPath $colorproPython)) { throw 'Python runtime missing' }

@@ -1,7 +1,12 @@
 ColorPro logo
 =============
-logo.png is the user-approved, AI-restored transparent application mark.
-Generated with the built-in image generation tool from the user's logo reference.
+logo.png is the final glossy pink/purple mark supplied by the user on 2026-10-10.
+It is copied byte-for-byte from the supplied transparent PNG: no redraw,
+recoloring, background removal or contour changes. It supersedes the blue mark.
+
+logo.ico is derived from logo.png for Windows executable, installer and shortcuts.
+Regenerate it with: python -m colorpro.build.brand_assets
+The release staging step rejects a stale or unrelated icon.
 It is branding artwork, not a photograph or a training asset.
 The original approved PNG is used without recolouring or redrawing.
 

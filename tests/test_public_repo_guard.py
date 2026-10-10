@@ -76,11 +76,11 @@ def test_photo_outside_synthetic_tree_is_blocked() -> None:
 
 
 def test_only_exact_reviewed_branding_is_allowed() -> None:
-    name = "colorpro/assets/logo.png"
-    artwork = Path(__file__).resolve().parents[1] / name
-    assert not _rules(name, artwork.read_bytes())
-    assert "private-photo" in _rules(name, _png())
-    assert "private-photo" in _rules("colorpro/assets/photo.png", artwork.read_bytes())
+    for name in ("colorpro/assets/logo.png", "colorpro/assets/logo.ico"):
+        artwork = Path(__file__).resolve().parents[1] / name
+        assert not _rules(name, artwork.read_bytes())
+        assert "private-photo" in _rules(name, _png())
+        assert "private-photo" in _rules("colorpro/assets/photo.png", artwork.read_bytes())
 
 
 def test_photo_signature_cannot_be_hidden_behind_text_extension() -> None:

@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
+from colorpro.build.brand_assets import ASSETS, validate_icon
 from colorpro.config import ROOT, V39_SHA256, load_config, verify_runtime
 
 APP = [
@@ -53,8 +54,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--platform", choices=("win10", "win7"), required=True)
-    parser.add_argument("--icon", type=Path, required=True)
+    parser.add_argument("--icon", type=Path, default=ASSETS / "logo.ico")
     args = parser.parse_args()
+    validate_icon(args.icon)
     config = load_config()
     verify_runtime(config)
     stage = args.output.resolve()

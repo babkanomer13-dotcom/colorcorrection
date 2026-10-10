@@ -35,7 +35,8 @@ GIT_EXECUTABLE = shutil.which("git")
 # Reviewed public branding only, pinned by content as well as exact path.
 # No photographs, arbitrary replacements or other files in assets are exempted.
 PUBLIC_BRANDING = {
-    "colorpro/assets/logo.png": "2e41d2cdf5ddb0f5550c718a115554171936326fbad263ca11c40bded602bb3c",
+    "colorpro/assets/logo.png": "76e84b2555c81dc2e32ff23c2e8f603ad77d437d36f85d1bcbdfb2d49d26318a",
+    "colorpro/assets/logo.ico": "85aab7eb9873e1e652bd56f3e40b21166670d72f057f0d167cbf002334f67a58",
 }
 _GIT_OBJECT_ID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 
