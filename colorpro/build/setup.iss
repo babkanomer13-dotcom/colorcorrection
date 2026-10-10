@@ -46,6 +46,8 @@ OutputDir={#ReleaseRoot}
 OutputBaseFilename={#OutputName}
 SetupIconFile={#StageRoot}\colorpro.ico
 UninstallDisplayIcon={app}\ColorPro.exe
+; Notify Windows about updated icon resources, without deleting caches or restarting Explorer.
+ChangesAssociations=yes
 #ifdef CompactRoot
 Compression=lzma2/fast
 #else
@@ -92,6 +94,7 @@ Filename: "{app}\ColorPro.exe"; Description: "Запустить {#ProductName}"
 ; Never remove user photographs, settings, logs or processed outputs on uninstall.
 [Code]
 #include "compact_setup.iss"
+#include "shortcuts_setup.iss"
 #ifdef Legacy
 function GetModuleHandle(Name: String): LongWord;
   external 'GetModuleHandleW@kernel32.dll stdcall';
