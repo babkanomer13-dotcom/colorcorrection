@@ -1,0 +1,1645 @@
+{
+  "reference_version": "15.0.0",
+  "scope": "RGB8 sRGB, finite independent full-colour comparisons",
+  "source": "Synthetic RGB grid; no photographs or model weights",
+  "checks": [
+    {
+      "settings": {
+        "shadows": [
+          -100,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "b8357bbc85babe51d5fb8cbb8c656e020ee5b15d6689de7407fc2b1f26f971d0"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -99,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "99d90e3da1a0c977e85f571833b12b89f995e9ec7d60fe973face23cca6d552f"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -50,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "831b9bb115c5fe190617ecbc4b6247b4007d1adfa2af77406ff8fae010184fc1"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -20,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "d38a2027893e2e0c6d819bb17b117c39f5a25825d783bab4222dbabd8a8cb9d1"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -1,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5924ed67e4b0981e3d5651b0d17f76946a1be112c48fb0638344fe36c2b001ea"
+    },
+    {
+      "settings": {
+        "shadows": [
+          1,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "015294e587082fd70239c549f04ed45773dbf5abcb0bd20b95a4edf345948709"
+    },
+    {
+      "settings": {
+        "shadows": [
+          20,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "a77b8e42edd9c323c84a70addd9a9f0334ac2f990ed2960a3d7e66054c137fda"
+    },
+    {
+      "settings": {
+        "shadows": [
+          50,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "916e908a99b022c2036b58bee32dd65dd60e920625d9758d8a02fb46c5f23b74"
+    },
+    {
+      "settings": {
+        "shadows": [
+          99,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "c4d712c3d09e601609fa6767ef1a1583d75135330ae30af3b954be64857b038a"
+    },
+    {
+      "settings": {
+        "shadows": [
+          100,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "1443b21eb3d4622c4bdeeef438812701bd49cafbf04a13be079e98d3ed40cf6b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          -100,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "47c7404e1212d1e37693e3f5c0e36ac3b4f321f2000cddd614e903040186d5be"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          -99,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "47c7404e1212d1e37693e3f5c0e36ac3b4f321f2000cddd614e903040186d5be"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          -50,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5fd525a1fab33ae091149f7be0ca972801c2f58f9faaf584b501c1961c23e971"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          -20,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "b098a26eabe452301f3c430d5f0ba1a003d74143aa0c28964eec1bdfd0a67bd4"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          -1,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "a6f58f31161af61a3f9767151bbd401c2ff82e092f7082ab789bb92030fa1124"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          1,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "b54a2d7810480014fe7c95ce6d8c9b60dfa380086bad9f3f63a3a8d0e13f98db"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          20,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "70f049e9753b477e1a88f9c61314f62985e7dbaff33d352b3dc2df0b87d7a760"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          50,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "1443b21eb3d4622c4bdeeef438812701bd49cafbf04a13be079e98d3ed40cf6b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          99,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "cb6a03511b5af4c4085c9bce8d44403da43285b1482224b109a07e8c8fcbf992"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          100,
+          0,
+          0
+        ],
+        "highlights": [
+          0,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "0bc836d5e8ebfc9c3e2d10205912a005a69803c2e15113a58f1cba8497f3e75b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          -100,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5fd525a1fab33ae091149f7be0ca972801c2f58f9faaf584b501c1961c23e971"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          -99,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5fd525a1fab33ae091149f7be0ca972801c2f58f9faaf584b501c1961c23e971"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          -50,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "6825812db709a18a8374b84f1369824c2341e8e15c769dc8089bc4a77787da4f"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          -20,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "af89aec322aa7daf23a8ba3b2cb1969ec630795a47d43beaed1dc989e6c6ed40"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          -1,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "015294e587082fd70239c549f04ed45773dbf5abcb0bd20b95a4edf345948709"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          1,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "0333fb8cd76eb9b9bba41ea78b40c195f5073d38a5cfd1f7a49b5c87a8af7985"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          20,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "298a1d89ecefbf433a0d7b77e3db0235abee50322eab583f62f01277d44af0f9"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          50,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "27cc9e22c3d21c24d3dba217c37e15a5b61fe614bb3ad5f8cb76162cb586e927"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          99,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "a94d98494c5edf9f627661c5185bb949f1457113f217e659872ef2b1fe3ad17b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          0,
+          0,
+          0
+        ],
+        "midtones": [
+          0,
+          0,
+          0
+        ],
+        "highlights": [
+          100,
+          0,
+          0
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "b963c8e3bedeb546501b1ef45605e2be665ac10d98082c99545755fc62ed4ec3"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -44,
+          19,
+          -19
+        ],
+        "midtones": [
+          -96,
+          93,
+          -25
+        ],
+        "highlights": [
+          48,
+          100,
+          -100
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "6cc8323dab215ece0693471dcb26c1d77b55e48c20d057ce678180e205ab94f9"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -44,
+          19,
+          -19
+        ],
+        "midtones": [
+          -96,
+          93,
+          -25
+        ],
+        "highlights": [
+          48,
+          100,
+          -100
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "80e010edd0f0bcbd71179dbb27aed76fd0e57b414acdfa8d3480988f7cf1cfd3"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -62,
+          -47,
+          66
+        ],
+        "midtones": [
+          -55,
+          85,
+          -91
+        ],
+        "highlights": [
+          61,
+          -75,
+          38
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "76bd4165104e79d7a7ef33a70a5ca35ebd611aab90567a608bdf3ed1a634ea91"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -62,
+          -47,
+          66
+        ],
+        "midtones": [
+          -55,
+          85,
+          -91
+        ],
+        "highlights": [
+          61,
+          -75,
+          38
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "3617abc409b68750f756999b8b04feecd45966b37e06b06a34fc2a8b7d67cb06"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -24,
+          -81,
+          -7
+        ],
+        "midtones": [
+          -13,
+          -96,
+          22
+        ],
+        "highlights": [
+          -50,
+          -64,
+          -13
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "3dae6f5ad2d154910c1b35c8478897f4eeb21107ce2ce04f687a622e0dea34a9"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -24,
+          -81,
+          -7
+        ],
+        "midtones": [
+          -13,
+          -96,
+          22
+        ],
+        "highlights": [
+          -50,
+          -64,
+          -13
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "2656d019a7ce3c65518fb7e8bef94df783e9627a5febdf6342d8510663f2f882"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -96,
+          -30,
+          -6
+        ],
+        "midtones": [
+          87,
+          -18,
+          23
+        ],
+        "highlights": [
+          -37,
+          -77,
+          -20
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "062816acca67803ff0f3178a1ed6efbd73ae458b929cfe54341030a5a233b4ac"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -96,
+          -30,
+          -6
+        ],
+        "midtones": [
+          87,
+          -18,
+          23
+        ],
+        "highlights": [
+          -37,
+          -77,
+          -20
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "c9398caeb0cbc5ce7cecc3445508c2655646beeea02084e661e26e1274609b3e"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -51,
+          28,
+          85
+        ],
+        "midtones": [
+          30,
+          20,
+          0
+        ],
+        "highlights": [
+          74,
+          94,
+          40
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "136fd733a6afae7548c41c1c0d79d012f3e26e6d1d870d38a27f9f552656b8b8"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -51,
+          28,
+          85
+        ],
+        "midtones": [
+          30,
+          20,
+          0
+        ],
+        "highlights": [
+          74,
+          94,
+          40
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "3c15cf1fe4c8725dccd1869b11059968cafc672cca238dc6e166f878917c214d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          74,
+          96,
+          -99
+        ],
+        "midtones": [
+          -79,
+          -43,
+          -7
+        ],
+        "highlights": [
+          45,
+          42,
+          -53
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "76ed4439a234417a3e3bbca3662aff935ef4b3da51bad372ee280ddf9115b08a"
+    },
+    {
+      "settings": {
+        "shadows": [
+          74,
+          96,
+          -99
+        ],
+        "midtones": [
+          -79,
+          -43,
+          -7
+        ],
+        "highlights": [
+          45,
+          42,
+          -53
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "a439e53864c1865dc8ae53f292ee3d700dea75fbd8238cd64408d581669d1556"
+    },
+    {
+      "settings": {
+        "shadows": [
+          19,
+          -39,
+          -19
+        ],
+        "midtones": [
+          70,
+          38,
+          -37
+        ],
+        "highlights": [
+          76,
+          -94,
+          -55
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "d83a22a606d0661e0d10d83abc2d26ebb810e78305b6dd9d4f82673ecb433a3b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          19,
+          -39,
+          -19
+        ],
+        "midtones": [
+          70,
+          38,
+          -37
+        ],
+        "highlights": [
+          76,
+          -94,
+          -55
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "4bf9ff9cf85b2f32f961578645a044bbaec97c65fd35ac3cc29be98b71787d45"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -72,
+          76,
+          -26
+        ],
+        "midtones": [
+          50,
+          -73,
+          -91
+        ],
+        "highlights": [
+          -100,
+          14,
+          96
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5b876b7b884c531df10a71fbb8b64a367de9a8ba24ecc6f79077f0e43f9ed683"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -72,
+          76,
+          -26
+        ],
+        "midtones": [
+          50,
+          -73,
+          -91
+        ],
+        "highlights": [
+          -100,
+          14,
+          96
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "bc1792c88112dc6c062aa49a31b7fd499a7890cccaa3cd482bb5414d16b5e255"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -38,
+          -68,
+          -81
+        ],
+        "midtones": [
+          40,
+          60,
+          -25
+        ],
+        "highlights": [
+          29,
+          -79,
+          -64
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "12eebbebce3f06fa53b30b21f96510cd0f8c0faf137651b73377180a6614fe0f"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -38,
+          -68,
+          -81
+        ],
+        "midtones": [
+          40,
+          60,
+          -25
+        ],
+        "highlights": [
+          29,
+          -79,
+          -64
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "d8b3e2fe45b5b112f4676cc0189fb8e24a8621dfed14ec93ae29def9c8b58388"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -64,
+          -9,
+          -81
+        ],
+        "midtones": [
+          -83,
+          -91,
+          -26
+        ],
+        "highlights": [
+          43,
+          -18,
+          85
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "5c19e48c4fab43f11e2c6d457e174a85ac07cb97808f9fd2e8a4b3cf30444d9a"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -64,
+          -9,
+          -81
+        ],
+        "midtones": [
+          -83,
+          -91,
+          -26
+        ],
+        "highlights": [
+          43,
+          -18,
+          85
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "07aa1b744e426fb54d9a1dd76bcf33ad3e37171405d9904620ffa8c2b29cd408"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -29,
+          -94,
+          80
+        ],
+        "midtones": [
+          72,
+          40,
+          68
+        ],
+        "highlights": [
+          89,
+          77,
+          100
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "1018f3ac46cdd9a7a1f1602b349f15d10f26cd81a69a0ec1b6af97017646fc97"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -29,
+          -94,
+          80
+        ],
+        "midtones": [
+          72,
+          40,
+          68
+        ],
+        "highlights": [
+          89,
+          77,
+          100
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "28b92f7455487c72cc4687870348ef20071f233ba78a36dbd4c03047aba71f8d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -33,
+          -59,
+          87
+        ],
+        "midtones": [
+          16,
+          -88,
+          51
+        ],
+        "highlights": [
+          -89,
+          72,
+          65
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "d5e6f57caf74dcc72e1729d46ead62bb7de1034654dd5ac11ddd37c08d59923d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -33,
+          -59,
+          87
+        ],
+        "midtones": [
+          16,
+          -88,
+          51
+        ],
+        "highlights": [
+          -89,
+          72,
+          65
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "4d207fd9c4457f5182045b43bd757a63b3a6b3b1029c76af7d18c4a24e32b568"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -66,
+          -80,
+          94
+        ],
+        "midtones": [
+          -48,
+          29,
+          -35
+        ],
+        "highlights": [
+          -59,
+          -13,
+          -80
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "0b33681b5cc41f10c1f38dcbb445cf713c10157c19c6e0407752b2d1a3e5e441"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -66,
+          -80,
+          94
+        ],
+        "midtones": [
+          -48,
+          29,
+          -35
+        ],
+        "highlights": [
+          -59,
+          -13,
+          -80
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "a0b7321c4be32883487dad0f495c7d6760f5dd238d3f48ced5c59ca1e8ba701b"
+    },
+    {
+      "settings": {
+        "shadows": [
+          86,
+          87,
+          6
+        ],
+        "midtones": [
+          -60,
+          -26,
+          76
+        ],
+        "highlights": [
+          -77,
+          8,
+          -14
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "75df4623d988140f53661c33783645aaa8bebe54267727b2913a61a0cf4291c7"
+    },
+    {
+      "settings": {
+        "shadows": [
+          86,
+          87,
+          6
+        ],
+        "midtones": [
+          -60,
+          -26,
+          76
+        ],
+        "highlights": [
+          -77,
+          8,
+          -14
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "cd5e8b4f95dc7654729c79623270b807f727da5d569ac0deac496c2d8dd8a80f"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -6,
+          23,
+          -82
+        ],
+        "midtones": [
+          88,
+          -2,
+          -7
+        ],
+        "highlights": [
+          48,
+          -72,
+          51
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "0d77ea84169f3fcbb4c3cad5a9563e4dd762dc0ec58bbd704c76358822868cc1"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -6,
+          23,
+          -82
+        ],
+        "midtones": [
+          88,
+          -2,
+          -7
+        ],
+        "highlights": [
+          48,
+          -72,
+          51
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "c9ae2bc28a470c96c99a17fd4ca6d55d4c363ced6a060bb5975bfc8062315281"
+    },
+    {
+      "settings": {
+        "shadows": [
+          51,
+          17,
+          92
+        ],
+        "midtones": [
+          -11,
+          -90,
+          9
+        ],
+        "highlights": [
+          -79,
+          100,
+          1
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "f34d7d8d84e432390d212324750d5228c77bf449d4178c58dc8f9b69325a946d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          51,
+          17,
+          92
+        ],
+        "midtones": [
+          -11,
+          -90,
+          9
+        ],
+        "highlights": [
+          -79,
+          100,
+          1
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "52990972999e46fa47d6a67992c06abc6abc868ae374cf889b781af2078fceda"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -9,
+          -32,
+          57
+        ],
+        "midtones": [
+          1,
+          -100,
+          -69
+        ],
+        "highlights": [
+          -31,
+          -27,
+          73
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "b06cfd50c401ce2476d032a13d2580d8d926268295bb2ff2e4575f52a9663a0e"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -9,
+          -32,
+          57
+        ],
+        "midtones": [
+          1,
+          -100,
+          -69
+        ],
+        "highlights": [
+          -31,
+          -27,
+          73
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "8574490d763ebbcf829733f9b3309b358688a789f777f477223d4e99f38de3f7"
+    },
+    {
+      "settings": {
+        "shadows": [
+          26,
+          35,
+          -36
+        ],
+        "midtones": [
+          -82,
+          -23,
+          7
+        ],
+        "highlights": [
+          83,
+          -23,
+          88
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "9e0fa5063eabed26758edd780d6e1fb4b9c8a71b772389a633b439b55960f2a9"
+    },
+    {
+      "settings": {
+        "shadows": [
+          26,
+          35,
+          -36
+        ],
+        "midtones": [
+          -82,
+          -23,
+          7
+        ],
+        "highlights": [
+          83,
+          -23,
+          88
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "ac3a684367f09c56d3523a89c29c2b0f28e0906b9928affcefe7a828d1fe9b7a"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -82,
+          46,
+          13
+        ],
+        "midtones": [
+          0,
+          77,
+          64
+        ],
+        "highlights": [
+          82,
+          53,
+          -29
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "6ed733996283f5b823641aa868e934cf24030772b95923f7c1e52ed03d8047b4"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -82,
+          46,
+          13
+        ],
+        "midtones": [
+          0,
+          77,
+          64
+        ],
+        "highlights": [
+          82,
+          53,
+          -29
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "859b4e7ee057fa9282a20c9f041fd49ba71c3e281d9aaaf69e69829ddbdd9aaf"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -89,
+          -84,
+          92
+        ],
+        "midtones": [
+          -85,
+          -92,
+          -3
+        ],
+        "highlights": [
+          17,
+          35,
+          -30
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "3793be01bfaaaa40102c91f4d2c51baa1778b810a47298c8841fbcd99d402a1a"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -89,
+          -84,
+          92
+        ],
+        "midtones": [
+          -85,
+          -92,
+          -3
+        ],
+        "highlights": [
+          17,
+          35,
+          -30
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "2a141415796ad8181d6b1ae06f76641d8f3d3433e9affc2adb4154f965efb26d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          16,
+          -2,
+          -21
+        ],
+        "midtones": [
+          -97,
+          6,
+          -36
+        ],
+        "highlights": [
+          -57,
+          31,
+          -81
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "fc35ada2813c0ea87f5475da8218a175790274d9ed631d2f5cc8cb2f76fb7bbe"
+    },
+    {
+      "settings": {
+        "shadows": [
+          16,
+          -2,
+          -21
+        ],
+        "midtones": [
+          -97,
+          6,
+          -36
+        ],
+        "highlights": [
+          -57,
+          31,
+          -81
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "53ea3a1431f227d30ba2742106768429362379c141f8568f34af2c996fdf4c0c"
+    },
+    {
+      "settings": {
+        "shadows": [
+          81,
+          -42,
+          81
+        ],
+        "midtones": [
+          -58,
+          -76,
+          73
+        ],
+        "highlights": [
+          -68,
+          87,
+          -65
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "2f24f20af6971cb1616e46e468ee88b62685ecd5a310726ebdc05ad29568a1b4"
+    },
+    {
+      "settings": {
+        "shadows": [
+          81,
+          -42,
+          81
+        ],
+        "midtones": [
+          -58,
+          -76,
+          73
+        ],
+        "highlights": [
+          -68,
+          87,
+          -65
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "ea9351cfeb9e26cac8f77c3de89085fe00e56e42f5f64f2dcdfc20595ed286a7"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -39,
+          -10,
+          76
+        ],
+        "midtones": [
+          -71,
+          -61,
+          34
+        ],
+        "highlights": [
+          -49,
+          74,
+          -5
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "ed966b26d4954907317b5ad747da2a81261b235d0dd4907e7a6668097801ca6d"
+    },
+    {
+      "settings": {
+        "shadows": [
+          -39,
+          -10,
+          76
+        ],
+        "midtones": [
+          -71,
+          -61,
+          34
+        ],
+        "highlights": [
+          -49,
+          74,
+          -5
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "9f632a1fd305d9f01555a2e67c24ad0383b73710110831d869224364244b25ce"
+    },
+    {
+      "settings": {
+        "shadows": [
+          36,
+          -53,
+          14
+        ],
+        "midtones": [
+          -48,
+          39,
+          64
+        ],
+        "highlights": [
+          16,
+          76,
+          79
+        ],
+        "preserve_luminosity": false
+      },
+      "pixel_sha256": "cf7bf788d38be3ceb04779e8e8265b4797ea3288a2fa51067bacd95ba462a8bb"
+    },
+    {
+      "settings": {
+        "shadows": [
+          36,
+          -53,
+          14
+        ],
+        "midtones": [
+          -48,
+          39,
+          64
+        ],
+        "highlights": [
+          16,
+          76,
+          79
+        ],
+        "preserve_luminosity": true
+      },
+      "pixel_sha256": "2fcf4a415e9b8d89760ad0d598dcd30565dca85467cdcd3894b6ad5a1e8a99c4"
+    }
+  ]
+}

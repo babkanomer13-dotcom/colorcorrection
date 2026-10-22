@@ -69,6 +69,37 @@ def test_compact_has_no_first_install_fallback(tmp_path):
     assert not (tmp_path / "plan/baseline.iss").exists()
 
 
+def test_archived_inventory_has_identical_compact_plan(tmp_path):
+    from colorpro.build.compact import inventory
+
+    dist, base = tmp_path / "dist", tmp_path / "base"
+    for path in (dist, base):
+        path.mkdir()
+        (path / "runtime.dll").write_bytes(b"unchanged runtime")
+        (path / "ColorPro.exe").write_bytes(path.name.encode())
+    physical = generate(dist, [base], tmp_path / "physical", "win10")
+    archived = generate(
+        dist, [], tmp_path / "archived", "win10", baseline_inventories=[inventory(base)]
+    )
+    assert physical == archived
+    assert (tmp_path / "physical/files.iss").read_bytes() == (
+        tmp_path / "archived/files.iss"
+    ).read_bytes()
+
+
+def test_archived_inventory_rejects_invalid_digest_and_path():
+    from colorpro.build.compact import validated_inventory
+
+    for data in (
+        {},
+        {"ColorPro.exe": {"sha256": "bad", "size": 10}},
+        {"ColorPro.exe": row("a"), "../bad": row("b")},
+        {"ColorPro.exe": row("a", -1)},
+    ):
+        with pytest.raises(ValueError):
+            validated_inventory(data)
+
+
 def test_full_installer_is_not_downloaded_by_updater(tmp_path):
     import json
 
@@ -88,7 +119,9 @@ def test_full_installer_is_not_downloaded_by_updater(tmp_path):
     assert len(assets) == 6
     for channel in ("win10", "win7"):
         manifest = json.loads(
-            (tmp_path / f"ColorPro-{__version__}-{channel}-update.json").read_text("utf8")
+            (tmp_path / f"ColorPro-{__version__}-{channel}-update.json").read_text(
+                "utf8"
+            )
         )
         assert manifest["kind"] == "compact"
         assert len(manifest["files"]) == 1

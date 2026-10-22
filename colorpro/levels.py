@@ -37,7 +37,9 @@ def histogram(pixels):
     result = np.zeros((3, 256), dtype=np.int64)
     for start in range(0, len(flat), 1_000_000):
         for channel in range(3):
-            result[channel] += np.bincount(flat[start : start + 1_000_000, channel], minlength=256)
+            result[channel] += np.bincount(
+                flat[start : start + 1_000_000, channel], minlength=256
+            )
     return result
 
 
@@ -52,7 +54,9 @@ def picked_levels(settings, pixel, kind):
     if kind not in {"black", "gray", "white"}:
         raise ValueError("Неизвестная пипетка")
     bank = _gamma_bank()
-    target = round(sum(int(bank.lut(Levels(**result[c + 1]))[pixel[c]]) for c in range(3)) / 3)
+    target = round(
+        sum(int(bank.lut(Levels(**result[c + 1]))[pixel[c]]) for c in range(3)) / 3
+    )
     for channel, row in enumerate(result[1:]):
         value = pixel[channel]
         if kind == "black":
@@ -66,7 +70,9 @@ def picked_levels(settings, pixel, kind):
             for centigamma in range(10, 1000):
                 row["gamma"] = centigamma / 100
                 mapped = int(bank.lut(Levels(**row))[value])
-                candidates.append((abs(mapped - target), abs(row["gamma"] - previous), centigamma))
+                candidates.append(
+                    (abs(mapped - target), abs(row["gamma"] - previous), centigamma)
+                )
             row["gamma"] = min(candidates)[2] / 100
     return result
 
@@ -82,7 +88,9 @@ def digest(path):
 class LevelsSession:
     def __init__(self, output, source):
         if Path(output).is_symlink():
-            raise ValueError("Результат заменён символической ссылкой; сохранение запрещено")
+            raise ValueError(
+                "Результат заменён символической ссылкой; сохранение запрещено"
+            )
         self.path = Path(output).resolve()
         if self.path == Path(source).resolve():
             raise ValueError("Нельзя редактировать исходник вместо результата")
@@ -100,16 +108,24 @@ class LevelsSession:
         image.close()
         self.format = "JPEG" if self.path.suffix.lower() in {".jpg", ".jpeg"} else "PNG"
 
-    def save(self, settings):
+    def save(self, settings, tone=None, hsl=None, balance=None):
         from colorcorrection.classic_face_inference import pixel_hash
         from colorcorrection.levels_operator import apply_rgb_lut
 
         self.item.unchanged()
         if digest(self.path) != self.sha:
-            raise ValueError("Результат изменён другой программой. Откройте его заново.")
-        lut = levels_lut(settings)
+            raise ValueError(
+                "Результат изменён другой программой. Откройте его заново."
+            )
+        from colorpro.manual_tone import combined_lut
+
+        lut = combined_lut(settings, tone, balance)
         result = apply_rgb_lut(self.pixels, lut)
-        if not np.array_equal(lut, np.broadcast_to(np.arange(256), (3, 256))):
+        if hsl is not None:
+            from colorpro.manual_hsl import apply_hsl
+
+            result = apply_hsl(result, hsl)
+        if not np.array_equal(result, self.pixels):
             with tempfile.TemporaryDirectory(
                 prefix=".colorpro-levels-", dir=self.path.parent
             ) as temp:
@@ -117,6 +133,15 @@ class LevelsSession:
                 save_result(target, result, self.metadata, self.format)
                 self.item.unchanged()
                 if digest(self.path) != self.sha:
-                    raise ValueError("Файл изменён во время сохранения; перезапись отменена.")
+                    raise ValueError(
+                        "Файл изменён во время сохранения; перезапись отменена."
+                    )
                 os.replace(target, self.path)
-        return dict(manual_levels=settings, output_pixel_sha256=pixel_hash(result))
+        data = {"manual_levels": settings, "output_pixel_sha256": pixel_hash(result)}
+        if tone is not None:
+            data["manual_brightness_contrast"] = dict(tone)
+        if hsl is not None:
+            data["manual_hsl"] = dict(hsl)
+        if balance is not None:
+            data["manual_color_balance"] = copy.deepcopy(balance)
+        return data

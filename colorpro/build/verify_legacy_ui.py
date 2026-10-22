@@ -13,7 +13,7 @@ def main():
     import numpy as np
     from PIL import Image
     from PySide2.QtCore import QSettings, Qt
-    from PySide2.QtGui import QColor, QFontDatabase, QPalette
+    from PySide2.QtGui import QColor, QFontDatabase, QKeySequence, QPalette
     from PySide2.QtTest import QTest
     from PySide2.QtWidgets import QApplication
 
@@ -40,11 +40,14 @@ def main():
 
     app = QApplication([])
     for name in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf"):
-        QFontDatabase.addApplicationFont(str(Path(os.environ["WINDIR"]) / "Fonts" / name))
+        QFontDatabase.addApplicationFont(
+            str(Path(os.environ["WINDIR"]) / "Fonts" / name)
+        )
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
     window = Window(
-        engine_factory=FakeEngine, settings=QSettings(str(output / "test.ini"), QSettings.IniFormat)
+        engine_factory=FakeEngine,
+        settings=QSettings(str(output / "test.ini"), QSettings.IniFormat),
     )
     window.show()
 
@@ -59,6 +62,18 @@ def main():
     window.show_page(window.SETTINGS)
     app.processEvents()
     window.grab().save(str(output / "settings.png"))
+    window.select_settings_section(1)
+    keys = window.shortcut_panel
+    previous = dict(window.shortcuts.bindings)
+    keys.editors["save"].setKeySequence(QKeySequence("Ctrl+O"))
+    assert not keys.apply() and window.shortcuts.bindings == previous
+    keys.editors["save"].setKeySequence(QKeySequence("Ctrl+Shift+S"))
+    assert keys.apply() and window.shortcuts.bindings["save"] == "Ctrl+Shift+S"
+    keys.search.setText("правки")
+    assert keys.table.isRowHidden(0)
+    app.processEvents()
+    window.grab().save(str(output / "shortcuts.png"))
+    window.select_settings_section(0)
     for combo in (window.device, window.format):
         combo.showPopup()
         app.processEvents()
@@ -96,10 +111,23 @@ def main():
     assert result.name == "synthetic_с.png"
     pump(lambda: not window.preview_loader.isRunning())
     window.review.editor.begin()
-    pump(lambda: window.review.editor.session is not None and not window.review.editor.running())
+    pump(
+        lambda: (
+            window.review.editor.session is not None
+            and not window.review.editor.running()
+        )
+    )
     window.review.editor.controls["gamma"][0].setValue(1.25)
+    window.review.editor.change_hsl("lightness", 10)
+    window.review.editor.change_balance(0, 12)
+    window.review.editor.undo_edit()
+    assert window.review.editor.balance["midtones"][0] == 0
+    window.review.editor.redo_edit()
+    assert window.review.editor.balance["midtones"][0] == 12
+    if window.review.editor.tone_section is not None:
+        window.review.editor.change_tone("brightness", 11)
     window.review.editor.render_preview()
-    app.processEvents()
+    pump(window.review.editor.preview_idle)
     window.grab().save(str(output / "levels.png"))
     window.review.editor.save_result()
     pump(lambda: not window.review.editor.active and not window.review.editor.running())
@@ -107,10 +135,24 @@ def main():
         assert np.asarray(edited).mean() > 100
     with Image.open(photo) as untouched:
         assert np.asarray(untouched).mean() == 100
+    assert window.queue.results[0]["output"] == str(result)
+    pump(lambda: not window.preview_loader.isRunning())
+    window.review.editor.begin()
+    pump(
+        lambda: (
+            window.review.editor.session is not None
+            and not window.review.editor.running()
+        )
+    )
+    window.review.editor.cancel_edit()
+    pump(lambda: not window.review.editor.preview_running())
     window.remove_selected()
     assert not window.queue.items and result.is_file() and photo.is_file()
     window.close()
-    print("PASS: Qt5 dropdowns / queue / preview / manual levels save / original safe / remove")
+    pump(lambda: not window.isVisible())
+    print(
+        "PASS: Qt5 dropdowns / queue / shortcut editing / async preview / manual tools and undo / full-size save / original safe"
+    )
 
 
 if __name__ == "__main__":

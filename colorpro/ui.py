@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QAbstractTableModel,
+    QItemSelectionModel,
     QModelIndex,
     QSettings,
     QSize,
@@ -20,9 +21,7 @@ from PySide6.QtGui import (
     QColor,
     QDesktopServices,
     QFontDatabase,
-    QKeySequence,
     QPixmap,
-    QShortcut,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -60,6 +59,8 @@ from colorpro.design import (
 )
 from colorpro.files import EXTENSIONS, collect_inputs
 from colorpro.preview import ComparePage, PreviewWorker
+from colorpro.shortcuts import ShortcutManager
+from colorpro.shortcut_panel import ShortcutPanel
 from colorpro.widgets import combo_box, navigation_icon
 
 STATUS = {
@@ -128,7 +129,10 @@ class QueueModel(QAbstractTableModel):
         return 0 if parent is not None and parent.isValid() else len(self.headers)
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
-        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
             return self.headers[section]
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -138,7 +142,11 @@ class QueueModel(QAbstractTableModel):
         record = self.results.get(index.row(), {})
         state = record.get("status", "queued")
         if role == Qt.ItemDataRole.CheckStateRole and index.column() == 0:
-            return Qt.CheckState.Checked if item.key in self.checked else Qt.CheckState.Unchecked
+            return (
+                Qt.CheckState.Checked
+                if item.key in self.checked
+                else Qt.CheckState.Unchecked
+            )
         if role == Qt.ItemDataRole.DisplayRole:
             return [
                 "",
@@ -150,7 +158,10 @@ class QueueModel(QAbstractTableModel):
             ][index.column()]
         if role == Qt.ItemDataRole.ToolTipRole:
             return "\n".join(
-                filter(None, [item.label, item.path, record.get("reason"), record.get("output")])
+                filter(
+                    None,
+                    [item.label, item.path, record.get("reason"), record.get("output")],
+                )
             )
         if role == Qt.ItemDataRole.ForegroundRole and index.column() == 3:
             return QColor(
@@ -170,7 +181,11 @@ class QueueModel(QAbstractTableModel):
         return flags | Qt.ItemFlag.ItemIsUserCheckable if index.column() == 0 else flags
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
-        if index.isValid() and index.column() == 0 and role == Qt.ItemDataRole.CheckStateRole:
+        if (
+            index.isValid()
+            and index.column() == 0
+            and role == Qt.ItemDataRole.CheckStateRole
+        ):
             key = self.items[index.row()].key
             if value == Qt.CheckState.Checked or value == 2:
                 self.checked.add(key)
@@ -224,7 +239,9 @@ class ImportWorker(QThread):
 
     def run(self):
         try:
-            items, errors = collect_inputs(self.paths, self.existing, self.isInterruptionRequested)
+            items, errors = collect_inputs(
+                self.paths, self.existing, self.isInterruptionRequested
+            )
             self.result.emit(items, errors)
         except Exception as error:
             self.failed.emit(str(error))
@@ -242,7 +259,12 @@ class BatchWorker(QThread):
 
     def run(self):
         try:
-            run_batch(*self.args, self.control, self.event.emit, engine_factory=self.engine_factory)
+            run_batch(
+                *self.args,
+                self.control,
+                self.event.emit,
+                engine_factory=self.engine_factory,
+            )
         except Exception as error:
             self.failed.emit(str(error))
 
@@ -259,7 +281,10 @@ class Window(QMainWindow):
         self.setMinimumSize(980, 640)
         self.setAcceptDrops(True)
         self.engine_factory = engine_factory
-        self.settings = settings if settings is not None else QSettings("ColorPro", "Desktop")
+        self.settings = (
+            settings if settings is not None else QSettings("ColorPro", "Desktop")
+        )
+        self.shortcuts = ShortcutManager(self)
         self.worker = self.importer = None
         self.output_folder = None
         self.close_requested = False
@@ -359,11 +384,13 @@ class Window(QMainWindow):
         self.queue_title = label("Очередь пуста", "muted")
         self.queue_title.hide()
         self.remove = button("Убрать", self.remove_selected, "small")
-        self.remove.setToolTip("Убрать выбранные из очереди · Delete. Файлы останутся на диске.")
+        self.remove.setToolTip(
+            "Убрать выбранные из очереди · Delete. Файлы останутся на диске."
+        )
         self.clear = button("Очистить", self.clear_queue, "small")
         self.add = button("Добавить", self.pick_files, "primary")
         self.add.setIcon(navigation_icon("plus", "white"))
-        self.add.setToolTip("Добавить фотографии или ZIP · Ctrl+O")
+        self.add.setToolTip("Добавить фотографии или ZIP")
         for control in (self.remove, self.clear, self.add):
             headline.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
         main.addLayout(headline)
@@ -399,7 +426,9 @@ class Window(QMainWindow):
         self.table.setShowGrid(False)
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(68)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
         self.table.horizontalHeader().moveSection(2, 1)
         self.table.horizontalHeader().moveSection(4, 5)
         for col, width in [(0, 32), (2, 32), (3, 151), (4, 38), (5, 70)]:
@@ -451,7 +480,9 @@ class Window(QMainWindow):
         self.expand.setIcon(navigation_icon("compare", "#777ca4"))
         self.expand.setEnabled(False)
         review_row.addWidget(self.expand)
-        self.next_attention = button("Следующий на проверку", self.select_attention, "small")
+        self.next_attention = button(
+            "Следующий на проверку", self.select_attention, "small"
+        )
         self.next_attention.setEnabled(False)
         self.next_attention.hide()
         main.addLayout(review_row)
@@ -511,19 +542,9 @@ class Window(QMainWindow):
         self.resize_grip.setFixedSize(16, 16)
         self.resize_grip.raise_()
         self.sync_review()
-        QShortcut(QKeySequence("F11"), self).activated.connect(self.toggle_review_fullscreen)
-        QShortcut(QKeySequence("Escape"), self).activated.connect(self.escape_page)
-        for index in range(self.pages.count()):
-            QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self).activated.connect(
-                lambda i=index: self.show_page(i)
-            )
-        for sequence, callback in (("Ctrl+O", self.pick_files), ("Delete", self.remove_selected)):
-            shortcut = QShortcut(
-                QKeySequence(sequence), self.table if sequence == "Delete" else self
-            )
-            if sequence == "Delete":
-                shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
-            shortcut.activated.connect(callback)
+        self.shortcuts.install()
+        self.shortcuts.changed.connect(self.refresh_shortcut_hints)
+        self.refresh_shortcut_hints()
         for name, widget in (
             ("device_mode", self.device),
             ("format", self.format),
@@ -543,10 +564,14 @@ class Window(QMainWindow):
         if geometry is not None:
             self.restoreGeometry(geometry)
         screen = self.screen().availableGeometry()
-        self.resize(min(self.width(), screen.width()), min(self.height(), screen.height()))
+        self.resize(
+            min(self.width(), screen.width()), min(self.height(), screen.height())
+        )
         self.remove.setEnabled(False)
         self.clear.setEnabled(False)
-        self.update_page.available.connect(lambda version: self.updates.setText("Обновления  •"))
+        self.update_page.available.connect(
+            lambda version: self.updates.setText("Обновления  •")
+        )
         self.update_page.idle.connect(self.update_idle)
         QTimer.singleShot(8000, self.auto_check_updates)
 
@@ -554,7 +579,9 @@ class Window(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "resize_grip"):
             self.resize_grip.move(self.width() - 17, self.height() - 17)
-            self.resize_grip.setVisible(not self.isMaximized() and not self.isFullScreen())
+            self.resize_grip.setVisible(
+                not self.isMaximized() and not self.isFullScreen()
+            )
 
     def queue_clicked(self, index):
         if index.column() != 4:
@@ -565,7 +592,11 @@ class Window(QMainWindow):
         action.setEnabled(bool(self.queue.results.get(index.row(), {}).get("output")))
         action = menu.addAction("Убрать из очереди", self.remove_selected)
         action.setEnabled(not self.busy())
-        menu.exec(self.table.viewport().mapToGlobal(self.table.visualRect(index).bottomRight()))
+        menu.exec(
+            self.table.viewport().mapToGlobal(
+                self.table.visualRect(index).bottomRight()
+            )
+        )
 
     def request_thumbnails(self, *args):
         if (
@@ -577,10 +608,20 @@ class Window(QMainWindow):
         first = max(0, self.table.rowAt(0))
         last = self.table.rowAt(self.table.viewport().height() - 1)
         last = min(len(self.queue.items), max(first + 12, last + 1))
+        self.start_thumbnails(self.queue.items[first:last])
+
+    def start_thumbnails(self, candidates):
+        if self.close_requested or (
+            self.thumbnail_worker and self.thumbnail_worker.isRunning()
+        ):
+            return
+        if self.worker and self.worker.isRunning():
+            return
         items = [
             item
-            for item in self.queue.items[first:last]
+            for item in candidates
             if item.key not in self.thumbnail_attempted
+            and item.key not in self.queue.thumbnails
         ]
         if not items:
             return
@@ -601,7 +642,9 @@ class Window(QMainWindow):
             self.thumbnail_attempted.discard(removed)
         for row, item in enumerate(self.queue.items):
             if item.key == key:
-                self.queue.dataChanged.emit(self.queue.index(row, 1), self.queue.index(row, 1))
+                self.queue.dataChanged.emit(
+                    self.queue.index(row, 1), self.queue.index(row, 1)
+                )
                 break
 
     def thumbnail_finished(self):
@@ -629,8 +672,30 @@ class Window(QMainWindow):
 
     def settings_page(self):
         page, layout = self.page_layout(
-            "Настройки", "Всё готово к работе. При необходимости измените параметры ниже."
+            "Настройки",
+            "Всё готово к работе. При необходимости измените параметры ниже.",
         )
+        tabs = QHBoxLayout()
+        self.settings_sections = QStackedWidget()
+        self.settings_tabs = []
+        for index, caption in enumerate(("Основные", "Горячие клавиши")):
+            tab = button(caption)
+            tab.setObjectName("settingsTab")
+            tab.setCheckable(True)
+            tab.setChecked(index == 0)
+            tab.clicked.connect(
+                lambda checked=False, i=index: self.select_settings_section(i)
+            )
+            tabs.addWidget(tab)
+            self.settings_tabs.append(tab)
+        tabs.addStretch()
+        layout.addLayout(tabs)
+        layout.addWidget(self.settings_sections, 1)
+        general = QWidget()
+        self.settings_sections.addWidget(general)
+        layout = QVBoxLayout(general)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
         processing = QFrame()
         processing.setObjectName("card")
         processing_row = QHBoxLayout(processing)
@@ -647,11 +712,15 @@ class Window(QMainWindow):
         self.device.addItem("Автоматически", "auto")
         self.device.addItem("Видеокарта NVIDIA", "cuda")
         self.device.addItem("Процессор", "cpu")
-        self.device.setToolTip("Автовыбор NVIDIA или процессора. AMD и Intel — через процессор.")
+        self.device.setToolTip(
+            "Автовыбор NVIDIA или процессора. AMD и Intel — через процессор."
+        )
         form.addWidget(self.device)
         form.addWidget(
             label(
-                "В автоматическом режиме ColorPro сам выберет доступное устройство.", "muted", True
+                "В автоматическом режиме ColorPro сам выберет доступное устройство.",
+                "muted",
+                True,
             )
         )
         layout.addWidget(processing)
@@ -678,7 +747,11 @@ class Window(QMainWindow):
         save.addWidget(label("Папка результатов", "muted"))
         row = QHBoxLayout()
         self.output = QLineEdit(
-            str(self.settings.value("output", str(Path.home() / "Pictures" / "ColorPro")))
+            str(
+                self.settings.value(
+                    "output", str(Path.home() / "Pictures" / "ColorPro")
+                )
+            )
         )
         self.output.setAccessibleName("Папка результатов")
         row.addWidget(self.output, 1)
@@ -686,16 +759,31 @@ class Window(QMainWindow):
         row.addWidget(self.choose_output)
         save.addLayout(row)
         save.addWidget(
-            label("Каждая серия — в отдельной папке. Исходники не изменяются.", "muted", True)
+            label(
+                "Каждая серия — в отдельной папке. Исходники не изменяются.",
+                "muted",
+                True,
+            )
         )
         layout.addWidget(saving)
-        self.settings_notice = label("Параметры сохраняются автоматически.", "muted", True)
+        self.settings_notice = label(
+            "Параметры сохраняются автоматически.", "muted", True
+        )
         layout.addWidget(self.settings_notice)
+        self.shortcut_panel = ShortcutPanel(self.shortcuts)
+        self.settings_sections.addWidget(self.shortcut_panel)
         layout.addStretch()
         return self.wrap_page(page)
 
+    def select_settings_section(self, index):
+        self.settings_sections.setCurrentIndex(index)
+        for number, tab in enumerate(self.settings_tabs):
+            tab.setChecked(number == index)
+
     def help_page(self):
-        page, layout = self.page_layout("Помощь", "От исходника до готовой серии — три шага.")
+        page, layout = self.page_layout(
+            "Помощь", "От исходника до готовой серии — три шага."
+        )
         for number, title, text in (
             (
                 "01",
@@ -710,8 +798,9 @@ class Window(QMainWindow):
             (
                 "03",
                 "Сравните и сохраните",
-                "Откройте вкладку «До / после», чтобы сравнить фотографии. "
-                "Кнопка «Уровни» позволяет подправить цвет и яркость результата и сохранить его. "
+                "Откройте «До / после» и выберите кадр в ленте справа. "
+                "Кнопка «Коррекция» открывает ручные инструменты. Правки применяются "
+                "только после нажатия «Сохранить результат»; исходник не меняется. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
         ):
@@ -726,6 +815,8 @@ class Window(QMainWindow):
             text_layout.addWidget(label(text, "muted", True))
             row.addLayout(text_layout, 1)
             layout.addWidget(card)
+        shortcuts_link = button("Настроить горячие клавиши", self.show_shortcut_settings)
+        layout.addWidget(shortcuts_link, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(
             label(
                 "Поддерживаются JPEG, PNG, TIFF, WebP и BMP: "
@@ -744,6 +835,10 @@ class Window(QMainWindow):
         layout.addStretch()
         return self.wrap_page(page)
 
+    def show_shortcut_settings(self):
+        self.show_page(self.SETTINGS)
+        self.select_settings_section(1)
+
     def profile_page(self):
         page, layout = self.page_layout("Профиль", "Ваше пространство в ColorPro.")
         card = QFrame()
@@ -759,7 +854,9 @@ class Window(QMainWindow):
         self.profile_name.setAccessibleName("Имя в локальном профиле")
         self.profile_name.textChanged.connect(self.save_profile)
         form.addWidget(self.profile_name)
-        form.addWidget(label("Имя сохраняется только на этом компьютере.", "muted", True))
+        form.addWidget(
+            label("Имя сохраняется только на этом компьютере.", "muted", True)
+        )
         layout.addWidget(card)
         layout.addStretch()
         return self.wrap_page(page)
@@ -770,7 +867,11 @@ class Window(QMainWindow):
         self.profile_button.set_name(name)
 
     def show_page(self, index):
-        if self.review is not None and self.review.editor.active and index != self.COMPARE:
+        if (
+            self.review is not None
+            and self.review.editor.active
+            and index != self.COMPARE
+        ):
             return
         if self.isFullScreen() and index != self.COMPARE:
             self.leave_review_fullscreen()
@@ -793,7 +894,10 @@ class Window(QMainWindow):
         import sys
         import time
 
-        if not getattr(sys, "frozen", False) or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        if (
+            not getattr(sys, "frozen", False)
+            or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+        ):
             return
         if self.busy() or self.close_requested or not self.update_page.auto.isChecked():
             return
@@ -853,13 +957,17 @@ class Window(QMainWindow):
     def imported(self, items, errors):
         self.queue.add(items)
         self.update_queue()
-        self.stage.setText(f"Добавлено: {len(items)}. Всего в очереди: {len(self.queue.items)}.")
+        self.stage.setText(
+            f"Добавлено: {len(items)}. Всего в очереди: {len(self.queue.items)}."
+        )
         if self.queue.items and not self.table.selectionModel().selectedRows():
             self.table.selectRow(0)
         if errors:
             box = QMessageBox(self)
             box.setWindowTitle("Некоторые файлы не добавлены")
-            box.setText(f"Пропущено: {len(errors)}. Остальные фотографии добавлены в очередь.")
+            box.setText(
+                f"Пропущено: {len(errors)}. Остальные фотографии добавлены в очередь."
+            )
             box.setDetailedText("\n".join(errors[:100]))
             box.exec()
 
@@ -888,7 +996,12 @@ class Window(QMainWindow):
         attention = sum(s in {"needs_attention", "partial"} for s in states)
         errors = states.count("error")
         for index, count in enumerate(
-            (states.count("corrected"), states.count("running"), errors, len(self.queue.items)),
+            (
+                states.count("corrected"),
+                states.count("running"),
+                errors,
+                len(self.queue.items),
+            ),
         ):
             self.stat_values[index].setText(str(count))
         self.summary.setText(
@@ -909,7 +1022,9 @@ class Window(QMainWindow):
             if record.get("status") in {"partial", "needs_attention", "error"}
         ]
         if candidates:
-            self.table.selectRow(next((i for i in candidates if i > current), candidates[0]))
+            self.table.selectRow(
+                next((i for i in candidates if i > current), candidates[0])
+            )
             self.show_page(self.COMPARE)
 
     def remove_selected(self):
@@ -918,7 +1033,9 @@ class Window(QMainWindow):
         selected = {i.row() for i in self.table.selectionModel().selectedRows()}
         if self.queue.checked:
             selected = {
-                i for i, item in enumerate(self.queue.items) if item.key in self.queue.checked
+                i
+                for i, item in enumerate(self.queue.items)
+                if item.key in self.queue.checked
             }
         if not selected:
             return
@@ -956,7 +1073,9 @@ class Window(QMainWindow):
             widget.setEnabled(not active)
         self.start.setEnabled(not active and bool(self.queue.items))
         self.clear.setEnabled(not active and bool(self.queue.items))
-        self.remove.setEnabled(not active and bool(self.table.selectionModel().selectedRows()))
+        self.remove.setEnabled(
+            not active and bool(self.table.selectionModel().selectedRows())
+        )
         self.settings_notice.setText(
             "Параметры доступны после завершения обработки."
             if active
@@ -1028,7 +1147,9 @@ class Window(QMainWindow):
         elif kind == "start":
             self.queue.update(event["index"], {"status": "running"})
             self.update_summary()
-            self.stage.setText(f"{event['index'] + 1} / {len(self.queue.items)} · {event['text']}")
+            self.stage.setText(
+                f"{event['index'] + 1} / {len(self.queue.items)} · {event['text']}"
+            )
             self.table.scrollTo(self.queue.index(event["index"], 0))
             if not self.table.selectionModel().selectedRows():
                 self.table.selectRow(event["index"])
@@ -1038,11 +1159,17 @@ class Window(QMainWindow):
             self.queue.update(event["record"]["index"], event["record"])
             record = event["record"]
             if self.batch_preview and self.batch_preview[0] == record["index"]:
-                key = (self.queue.items[record["index"]].key, record.get("output"), None)
+                key = (
+                    self.queue.items[record["index"]].key,
+                    record.get("output"),
+                    None,
+                )
                 self.cache_preview(key, self.batch_preview[1:])
             self.batch_preview = None
             self.progress.setValue(event["done"])
-            remaining = event["elapsed"] / event["done"] * (event["total"] - event["done"])
+            remaining = (
+                event["elapsed"] / event["done"] * (event["total"] - event["done"])
+            )
             self.counter.setText(
                 f"{event['done']} / {event['total']}  ·  {event['done'] / event['total']:.0%}"
                 f"  ·  ≈ {duration(remaining)} осталось"
@@ -1099,7 +1226,9 @@ class Window(QMainWindow):
         if self.worker.control.resume.is_set():
             self.worker.control.resume.clear()
             self.pause.setText("Продолжить")
-            self.stage.setText("Пауза после текущей фотографии. Уже готовые результаты сохранены.")
+            self.stage.setText(
+                "Пауза после текущей фотографии. Уже готовые результаты сохранены."
+            )
         else:
             self.worker.control.resume.set()
             self.pause.setText("Пауза")
@@ -1128,7 +1257,9 @@ class Window(QMainWindow):
         item = self.queue.items[index]
         self.sync_review()
         faces = [
-            tuple(face["native_bbox"]) for face in record.get("faces", []) if "native_bbox" in face
+            tuple(face["native_bbox"])
+            for face in record.get("faces", [])
+            if "native_bbox" in face
         ]
         face_record_key = (item.key, record.get("output"), tuple(faces))
         if face_record_key != self.face_record_key:
@@ -1144,7 +1275,9 @@ class Window(QMainWindow):
         bbox = self.face_choice.currentData()
         bbox = tuple(bbox) if bbox is not None else None
         reason = record.get("reason")
-        detail = REASONS.get(reason, reason) or STATUS.get(record.get("status", "queued"), "")
+        detail = REASONS.get(reason, reason) or STATUS.get(
+            record.get("status", "queued"), ""
+        )
         self.preview_detail.setText(f"{item.name} · {detail}")
         self.preview_detail.setToolTip(item.label + "\n" + str(detail))
         key = (item.key, record.get("output"), bbox)
@@ -1212,18 +1345,28 @@ class Window(QMainWindow):
 
     def manual_result_saved(self, index, data):
         changes = dict(data, status="corrected", reason=None, manually_edited=True)
-        self.queue.update(index, changes)
+        record = dict(self.queue.results.get(index, {}))
+        record.update(changes)
+        self.queue.update(index, record)
         if self.last_report is not None:
             for record in self.last_report["records"]:
                 if record["index"] == index:
                     record.update(changes)
             rows = self.last_report["records"]
-            self.last_report["corrected"] = sum(row["status"] == "corrected" for row in rows)
-            self.last_report["attention"] = sum(row["status"] == "needs_attention" for row in rows)
+            self.last_report["corrected"] = sum(
+                row["status"] == "corrected" for row in rows
+            )
+            self.last_report["attention"] = sum(
+                row["status"] in {"partial", "needs_attention"} for row in rows
+            )
             try:
-                write_json(Path(self.last_report["output"]) / "report.json", self.last_report)
+                write_json(
+                    Path(self.last_report["output"]) / "report.json", self.last_report
+                )
             except OSError as error:
-                self.error(f"Фотография сохранена, но отчёт обновить не удалось: {error}")
+                self.error(
+                    f"Фотография сохранена, но отчёт обновить не удалось: {error}"
+                )
         self.update_summary()
 
     def cache_preview(self, key, pair):
@@ -1246,7 +1389,11 @@ class Window(QMainWindow):
         if 0 <= index < len(self.queue.items):
             selected = self.table.selectionModel().selectedRows()
             if not selected or selected[0].row() != index:
-                self.table.selectRow(index)
+                self.table.selectionModel().setCurrentIndex(
+                    self.queue.index(index, 1),
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
 
     def select_relative(self, delta):
         selected = self.table.selectionModel().selectedRows()
@@ -1263,14 +1410,40 @@ class Window(QMainWindow):
             self.review_was_maximized = self.isMaximized()
             self.navigation.hide()
             self.chrome.hide()
-            self.review.fullscreen.setText("Вернуться · Esc")
+            self.review.fullscreen.setText("Вернуться")
+            self.review.fullscreen.setToolTip(self.shortcuts.hint("escape"))
             self.showFullScreen()
 
     def leave_review_fullscreen(self):
-        self.navigation.show()
+        self.navigation.setVisible(not self.review.editor.active)
         self.chrome.show()
-        self.review.fullscreen.setText("На весь экран · F11")
         self.showMaximized() if self.review_was_maximized else self.showNormal()
+        self.refresh_shortcut_hints()
+
+    def refresh_shortcut_hints(self):
+        self.review.fullscreen.setText(
+            "Вернуться" if self.isFullScreen() else "На весь экран"
+        )
+        self.add.setToolTip(
+            "Добавить фотографии или ZIP · " + self.shortcuts.hint("open")
+        )
+        self.remove.setToolTip(
+            "Убрать из очереди · "
+            + self.shortcuts.hint("remove")
+            + ". Файлы останутся на диске."
+        )
+        for widget, action in (
+            (self.review.fullscreen, "fullscreen"),
+            (self.review.previous, "previous"),
+            (self.review.next, "next"),
+            (self.review.levels_button, "edit"),
+            (self.review.editor.undo_button, "undo"),
+            (self.review.editor.redo_button, "redo"),
+            (self.review.editor.save, "save"),
+            (self.review.editor.reset, "reset"),
+            (self.review.editor.preview, "preview"),
+        ):
+            widget.setToolTip(self.shortcuts.hint(action))
 
     def escape_page(self):
         if self.isFullScreen():
@@ -1305,12 +1478,14 @@ class Window(QMainWindow):
     def closeEvent(self, event):
         if self.review.editor.active:
             if self.review.editor.running():
-                self.review.editor.status.setText("Дождитесь завершения текущей операции.")
+                self.review.editor.status.setText(
+                    "Дождитесь завершения текущей операции."
+                )
                 event.ignore()
                 return
             answer = QMessageBox.question(
                 self,
-                "Закрыть уровни?",
+                "Закрыть коррекцию?",
                 "Закрыть без сохранения ручных изменений?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
@@ -1319,6 +1494,10 @@ class Window(QMainWindow):
                 event.ignore()
                 return
             self.review.editor.end()
+        if self.review.editor.preview_running():
+            self.close_requested = True
+            event.ignore()
+            return
         if self.update_page.running():
             self.close_requested = True
             self.update_page.worker.requestInterruption()
@@ -1363,7 +1542,9 @@ def launch(screenshot=None):
     app = QApplication.instance() or QApplication([])
     if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
         for name in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf"):
-            QFontDatabase.addApplicationFont(str(Path(os.environ["WINDIR"]) / "Fonts" / name))
+            QFontDatabase.addApplicationFont(
+                str(Path(os.environ["WINDIR"]) / "Fonts" / name)
+            )
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
     app.setWindowIcon(icon())

@@ -8,6 +8,8 @@ from pathlib import Path
 
 from colorpro.build.brand_assets import ASSETS, validate_icon
 from colorpro.config import ROOT, V39_SHA256, load_config, verify_runtime
+from colorpro.manual_hsl import load_hsl_bank
+from colorpro.manual_tone import load_tone_bank
 
 APP = [
     "__init__.py",
@@ -17,6 +19,13 @@ APP = [
     "detector_path.py",
     "levels.py",
     "levels_panel.py",
+    "manual_auto.py",
+    "manual_tone.py",
+    "manual_hsl.py",
+    "manual_balance.py",
+    "filmstrip.py",
+    "shortcuts.py",
+    "shortcut_panel.py",
     "files.py",
     "batch.py",
     "preview.py",
@@ -59,27 +68,36 @@ def main():
     validate_icon(args.icon)
     config = load_config()
     verify_runtime(config)
+    # Never create a release with silently missing manual tools.
+    load_hsl_bank()
+    load_tone_bank()
     stage = args.output.resolve()
     stage.mkdir(parents=True, exist_ok=False)
     legacy = args.platform == "win7"
     for name in APP:
         text = (ROOT / "colorpro" / name).read_text(encoding="utf8")
         if legacy:
-            text = text.replace("PySide6", "PySide2").replace(".position()", ".localPos()")
+            text = text.replace("PySide6", "PySide2").replace(
+                ".position()", ".localPos()"
+            )
             text = text.replace(".exec()", ".exec_()")
             if name == "ui.py":
                 text = text.replace("    QShortcut,\n", "")
                 text = text.replace(
-                    "    QAbstractItemView,\n", "    QAbstractItemView,\n    QShortcut,\n"
+                    "    QAbstractItemView,\n",
+                    "    QAbstractItemView,\n    QShortcut,\n",
                 )
                 text = text.replace(
-                    'QSettings("ColorPro", "Desktop")', 'QSettings("ColorProWin7", "Desktop")'
+                    'QSettings("ColorPro", "Desktop")',
+                    'QSettings("ColorProWin7", "Desktop")',
                 )
                 text = text.replace(
                     'self.device.addItem("Видеокарта NVIDIA", "cuda")',
                     "# Legacy build has CPU-only PyTorch.",
                 )
-                text = text.replace('"Автоматически", "auto"', '"Автоматически · CPU", "auto"')
+                text = text.replace(
+                    '"Автоматически", "auto"', '"Автоматически · CPU", "auto"'
+                )
                 text = text.replace(
                     '"Автовыбор NVIDIA или процессора. AMD и Intel — через процессор."',
                     '"Сборка Windows 7 работает на процессоре."',
@@ -94,6 +112,14 @@ def main():
     assets = stage / "colorpro/assets"
     assets.mkdir()
     shutil.copyfile(ROOT / "colorpro/assets/logo.png", assets / "logo.png")
+    for name in (
+        "cc2014_brightness_contrast.npz",
+        "cc2014_brightness_contrast.json",
+        "cc2014_hsl.npz",
+        "cc2014_hsl.json",
+    ):
+        source = ROOT / "colorpro/assets" / name
+        shutil.copyfile(source, assets / name)
     payload = stage / "payload"
     origin = Path(config["runtime_root"]) / "colorcorrection"
     changes = {}
@@ -103,31 +129,36 @@ def main():
         shutil.copyfile(origin / name, out)
         if legacy and name == "auto_color.py":
             text = out.read_text(encoding="utf8").replace(
-                "from importlib.resources import files", "from importlib_resources import files"
+                "from importlib.resources import files",
+                "from importlib_resources import files",
             )
             out.write_text(text, encoding="utf8")
-            changes[name] = dict(
-                original_sha256=sha(origin / name),
-                packaged_sha256=sha(out),
-                reason="Python 3.8 importlib.resources backport only",
-            )
+            changes[name] = {
+                "original_sha256": sha(origin / name),
+                "packaged_sha256": sha(out),
+                "reason": "Python 3.8 importlib.resources backport only",
+            }
     # Package initializer originally imports unrelated train-time model families
     # using Python >=3.10. Inference needs only the two explicit V39 modules.
     init = payload / "python/colorcorrection/models/__init__.py"
     init.write_text(
-        '"""Preserved V39 inference models only; no training registry."""\n', encoding="utf8"
+        '"""Preserved V39 inference models only; no training registry."""\n',
+        encoding="utf8",
     )
-    changes["models/__init__.py"] = dict(
-        original_sha256=sha(origin / "models/__init__.py"),
-        packaged_sha256=sha(init),
-        reason="Omit unrelated training registry",
-    )
+    changes["models/__init__.py"] = {
+        "original_sha256": sha(origin / "models/__init__.py"),
+        "packaged_sha256": sha(init),
+        "reason": "Omit unrelated training registry",
+    }
     (payload / "weights").mkdir()
     import torch
 
     saved = torch.load(config["checkpoint"], map_location="cpu", weights_only=True)
     checkpoint = payload / "weights/v39.pt"
-    torch.save(dict(schema=saved["schema"], model_state_dict=saved["model_state_dict"]), checkpoint)
+    torch.save(
+        {"schema": saved["schema"], "model_state_dict": saved["model_state_dict"]},
+        checkpoint,
+    )
     packed = torch.load(checkpoint, map_location="cpu", weights_only=True)
     assert packed["model_state_dict"].keys() == saved["model_state_dict"].keys()
     assert all(
@@ -140,28 +171,30 @@ def main():
         for p in payload.rglob("*")
         if p.is_file()
     }
-    manifest = dict(
-        schema="colorpro-bundle-v1",
-        platform=args.platform,
-        source_checkpoint_sha256=V39_SHA256,
-        files=files,
-        raw_model_tensors_identical=True,
-        excluded=["ema", "optimizer", "rng", "training reports"],
-        code_adaptations=changes,
+    manifest = {
+        "schema": "colorpro-bundle-v1",
+        "platform": args.platform,
+        "source_checkpoint_sha256": V39_SHA256,
+        "files": files,
+        "raw_model_tensors_identical": True,
+        "excluded": ["ema", "optimizer", "rng", "training reports"],
+        "code_adaptations": changes,
+    }
+    (payload / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf8"
     )
-    (payload / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf8")
     shutil.copyfile(args.icon, stage / "colorpro.ico")
     for name in ("README-SETUP.txt", "README-WIN7.txt", "THIRD_PARTY_NOTICES.txt"):
         shutil.copyfile(ROOT / "colorpro/build" / name, stage / name)
     print(
         json.dumps(
-            dict(
-                stage=str(stage),
-                platform=args.platform,
-                files=len(files),
-                checkpoint=sha(checkpoint),
-                weights_unchanged=True,
-            )
+            {
+                "stage": str(stage),
+                "platform": args.platform,
+                "files": len(files),
+                "checkpoint": sha(checkpoint),
+                "weights_unchanged": True,
+            }
         )
     )
 

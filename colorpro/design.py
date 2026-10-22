@@ -74,6 +74,10 @@ QPushButton#primary:disabled { background: #e4b3d4; color: #fff8fd; border-color
 QPushButton#small { padding: 6px 12px; min-height: 18px; }
 QPushButton#square { padding: 6px 0; min-height: 20px; font-size: 18px; }
 QPushButton:focus, QComboBox:focus, QLineEdit:focus { border: 1px solid #c445a0; }
+QPushButton#settingsTab { padding: 8px 16px; background: white; color: #645a72; }
+QPushButton#settingsTab:checked { background: #fae9f4; color: #a71971; border-color: #d966ab; }
+QKeySequenceEdit { background: white; border: 1px solid #e0d9e5; border-radius: 6px; }
+QKeySequenceEdit QLineEdit { border: 0; background: transparent; padding: 4px 8px; }
 QLineEdit, QComboBox { background: #fefeff; border: 1px solid #dfe1f1; border-radius: 8px;
  selection-background-color: #c62490; padding: 7px 11px; min-height: 20px; }
 QComboBox { padding-right: 34px; }
@@ -93,6 +97,9 @@ QProgressBar::chunk { background: #d52995; border-radius: 4px; }
 QToolTip { background: #302a3c; color: white; border: 0; padding: 8px; }
 QCheckBox { spacing: 10px; background: transparent; }
 #levelsPanel { background: #fdfdff; border-radius: 10px; }
+QPushButton#adjustmentToggle { text-align: left; font-weight: 600; padding: 9px 10px; color: #4d425c; background: #f5f1f8; border: 1px solid #ebe4ee; }
+QPushButton#adjustmentToggle:checked { color: #a71971; background: #fceff7; border-color: #efd3e4; }
+QPushButton#historyButton { padding: 4px; min-width: 0; }
 QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #dfe1f1;
  border-radius: 5px; padding: 4px; min-height: 22px; }
 QSlider::groove:horizontal { height: 5px; background: #dedde8; border-radius: 2px; }

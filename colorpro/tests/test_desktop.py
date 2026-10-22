@@ -548,8 +548,10 @@ def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
     assert editor.active and window.busy() and not window.table.isEnabled()
     editor.controls["gamma"][0].setValue(1.30)
     editor.render_preview()
+    pump(app, editor.preview_idle)
     edited = window.compare.after.toImage()
     editor.preview.setChecked(False)
+    pump(app, editor.preview_idle)
     assert edited != window.compare.after.toImage()
     assert output.read_bytes() == initial
     editor.cancel_edit()

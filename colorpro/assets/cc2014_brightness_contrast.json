@@ -1,0 +1,93 @@
+{
+  "schema": "cc2014-brightness-contrast-rgb8-v1",
+  "reference_version": "15.0.0",
+  "sha256": "e06a1ef6a118408af453bf8dd92f3905da50316309b373400cc491a6f65698c3",
+  "shape": [
+    301,
+    151,
+    256
+  ],
+  "use_legacy": false,
+  "brightness_range": [
+    -150,
+    150
+  ],
+  "contrast_range": [
+    -50,
+    100
+  ],
+  "source": "Synthetic grayscale atlases; no photographs or model weights",
+  "independent_rgb_checks": [
+    {
+      "brightness": -150,
+      "contrast": 0,
+      "pixel_sha256": "8f0017f4ba6d7f9acde2df02201aa343aeda29b07830c47c0d94406d431466df"
+    },
+    {
+      "brightness": -20,
+      "contrast": 0,
+      "pixel_sha256": "d51fd881bacce1aa03c717a7e5948bebf8af9eea5ec6ed45c7dbd95b0dda0b00"
+    },
+    {
+      "brightness": -20,
+      "contrast": 20,
+      "pixel_sha256": "5d31ee07aa94c7e1270b949d00b0b4a91fd02c9cc30c8655283b1c86b435f3ac"
+    },
+    {
+      "brightness": -50,
+      "contrast": 0,
+      "pixel_sha256": "bab594e4b31684e906818e46c2f38cdc842c8b29051b2fdb40ef53f890042d03"
+    },
+    {
+      "brightness": 0,
+      "contrast": -20,
+      "pixel_sha256": "e9fea1ab9f45e4755cb5ff9792d8cf75eb7a9ce59ba125b14a2f0de31bdd974e"
+    },
+    {
+      "brightness": 0,
+      "contrast": -50,
+      "pixel_sha256": "4c0ce82bc44136bafa6e34cbd6ad9a1fcbe6b301d733db053d6855d6fbfba733"
+    },
+    {
+      "brightness": 0,
+      "contrast": 100,
+      "pixel_sha256": "a2c04f41be16f28c4688c34935f0f6b928ac8354aa138043272ce5a643ad472f"
+    },
+    {
+      "brightness": 0,
+      "contrast": 20,
+      "pixel_sha256": "5997e462a33ee5e5fe9678a332f9a72ecc9ef9ede15e7b744c49f42aacf46048"
+    },
+    {
+      "brightness": 0,
+      "contrast": 50,
+      "pixel_sha256": "5f2f734024e91474aa25c190541d9ce653ac5b66d8e89af836f7f4e9bfa25f8a"
+    },
+    {
+      "brightness": 150,
+      "contrast": 0,
+      "pixel_sha256": "9a3df50fdbf120c7f5f28a879b5ae9e1a1d985cbc146357e125189ccad430600"
+    },
+    {
+      "brightness": 20,
+      "contrast": 0,
+      "pixel_sha256": "0e660eefdcfe0f9df0331f75659fa5184c4c9a092bdb384c024c8c79c107dc27"
+    },
+    {
+      "brightness": 20,
+      "contrast": 20,
+      "pixel_sha256": "bc58ec7dd6eed61f700078a6630a0edb82525d2e029a772effd9adc98e55a555"
+    },
+    {
+      "brightness": 50,
+      "contrast": -20,
+      "pixel_sha256": "1bd887c84c63e4b47b16d698da8f2a7bbb83b087205ea1e573a1e21658715cb5"
+    },
+    {
+      "brightness": 50,
+      "contrast": 0,
+      "pixel_sha256": "9c3c8f77747da3409e61d7597bd1f91482e9e799336778badef36bf6c7f1aca1"
+    }
+  ],
+  "scope": "sRGB RGB8, Photoshop CC2014 15.0.0, default non-legacy adjustment; finite full-colour validation"
+}

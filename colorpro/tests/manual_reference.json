@@ -1,0 +1,1305 @@
+{
+  "schema": "colorpro-heldout-manual-rgb8-v1",
+  "reference_version": "15.0.0",
+  "source": "PCG64 seed 20261023, uint8 RGB, 512 x 512; synthetic, no photos",
+  "source_pixel_sha256": "8df7c8a015a2f66e8218239532286f1eb44445b7bf2863d77b7240ce118097f8",
+  "scope": "sRGB RGB8, independent settings and sequential combinations; finite validation",
+  "checks": [
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 15,
+          "contrast": -24
+        }
+      },
+      "pixel_sha256": "9c077251d7ebda0855b4c963fa5679161fd9f425a5332d1836f3930577bdec14"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": -22,
+          "contrast": -41
+        }
+      },
+      "pixel_sha256": "90cdeac53ef84dbaa64c13f5a1a38523e9c7191cdd9c930afa1f5fb1ac809f9e"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 96,
+          "contrast": -5
+        }
+      },
+      "pixel_sha256": "cf88308a3e55f4bc9dd6a643373133e89ec66d71c4febc74a3f280a1f689e762"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 45,
+          "contrast": 83
+        }
+      },
+      "pixel_sha256": "3d226d1a7158ffbade44ce902c999db92c0f6530c112f7a3dc29f26062a496bb"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 101,
+          "contrast": -10
+        }
+      },
+      "pixel_sha256": "91b3dc4d34f4d7c71d8482b46c4cc608890b0ca58b70bf628030e337b1d7ff75"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 5,
+          "contrast": 33
+        }
+      },
+      "pixel_sha256": "8cbb06020bb73b9dba604cae7a8c2a5bdbbbcddb87692dd01b685d88ba390360"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 83,
+          "contrast": 44
+        }
+      },
+      "pixel_sha256": "02230b971f122cefab4035a124ab15d11c865773e76353eb1bcb47fedd286f02"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": -14,
+          "contrast": -27
+        }
+      },
+      "pixel_sha256": "d8c53dbd4e95a2116362ccde3de466a498f22e7fc558e17d22cefa3e041abfb9"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": -124,
+          "contrast": 27
+        }
+      },
+      "pixel_sha256": "c43c75c8643d423f038f155c09ca7edc8a9e0536544e12d840f264b557160f4c"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 40,
+          "contrast": 33
+        }
+      },
+      "pixel_sha256": "0141b1cc523abc1381e79da8d2f4c3667062b1763585ba83ed4895cb54308954"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": 111,
+          "contrast": -41
+        }
+      },
+      "pixel_sha256": "2ab5fbea0a23a7e8d659be1018026d456a51b82e1d94d079b6f09d4922e17915"
+    },
+    {
+      "settings": {
+        "mode": "tone",
+        "tone": {
+          "brightness": -148,
+          "contrast": 65
+        }
+      },
+      "pixel_sha256": "e2dce577448e1ab8301caea224a423156d78110b5bba277afab3f0d339a4e459"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 125,
+          "saturation": -67,
+          "lightness": -9
+        }
+      },
+      "pixel_sha256": "b23716a373eb2e155d13b26d881d095b70e4de90a3e31c5561a21576d7f96207"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 65,
+          "saturation": -77,
+          "lightness": -82
+        }
+      },
+      "pixel_sha256": "3d6c03814cfdddf5661831727f06e5202997d5178c417e47c8330af52fa4d94e"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -105,
+          "saturation": 44,
+          "lightness": -77
+        }
+      },
+      "pixel_sha256": "e57189bc4e6cbd1a709391f7f18a0b9a0a82e129cf56014d8aabd82f9305f37a"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -67,
+          "saturation": 10,
+          "lightness": -70
+        }
+      },
+      "pixel_sha256": "ad297b566e1fe7dc29a1fb94e92d7fa2f31fa88b3a452e8ce97451746292083f"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 74,
+          "saturation": -92,
+          "lightness": 55
+        }
+      },
+      "pixel_sha256": "5913cace05e8a34d545a78af66ce3423d22a4f68849cd22f28676253c898abdc"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 177,
+          "saturation": -75,
+          "lightness": 53
+        }
+      },
+      "pixel_sha256": "af4072cac41c40cba2ec27041fed7148b7d2565e3b909f67a3138fa848009e56"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 108,
+          "saturation": 98,
+          "lightness": -39
+        }
+      },
+      "pixel_sha256": "043f58b29741f954d0c4adf8e52b9a6c1ceec871be5c80f1f813ce79796eb79f"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -106,
+          "saturation": 96,
+          "lightness": -52
+        }
+      },
+      "pixel_sha256": "5cba98d4156a61b2e02cf1dde160b9a137be0a64a288221172a4e20436420124"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -137,
+          "saturation": 21,
+          "lightness": -24
+        }
+      },
+      "pixel_sha256": "7fb5cd3da0e5319206dbc37ef402d29d33db4a16a9947bd0ba18c268708e0ff0"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": 166,
+          "saturation": -70,
+          "lightness": -100
+        }
+      },
+      "pixel_sha256": "599c1bb5ffd4b87229a81958f33f1060821cd01cd7aa7ccafa0d862f4522f3f6"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -67,
+          "saturation": 50,
+          "lightness": 31
+        }
+      },
+      "pixel_sha256": "6567a200aa53322ca2c18da450d41bb1b84848becfdf63841192ba7631000aa0"
+    },
+    {
+      "settings": {
+        "mode": "hsl",
+        "hsl": {
+          "hue": -9,
+          "saturation": 76,
+          "lightness": 8
+        }
+      },
+      "pixel_sha256": "9b1603d3555628e9801ca10daeccea903df4df33d5568350bf056953d01a6006"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            22,
+            90,
+            79
+          ],
+          "midtones": [
+            98,
+            27,
+            16
+          ],
+          "highlights": [
+            -54,
+            -1,
+            88
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "4c363722842fa061a646f2e8dfbcc095776ca6b8e182d7e67ed2cb4fb8b885a2"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            58,
+            -100,
+            31
+          ],
+          "midtones": [
+            8,
+            -51,
+            84
+          ],
+          "highlights": [
+            -44,
+            17,
+            -2
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "489ec65e8f9c9b3f4d12e18f005e147f3cc8a1ad765fea4aa90891757b668bb7"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -46,
+            1,
+            90
+          ],
+          "midtones": [
+            -27,
+            -75,
+            -60
+          ],
+          "highlights": [
+            -92,
+            -58,
+            11
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "65233afac7e7d4b17b69ec3e2a47520794054a562ba50f494a31b94b652ecc99"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -71,
+            62,
+            -24
+          ],
+          "midtones": [
+            25,
+            -95,
+            -97
+          ],
+          "highlights": [
+            60,
+            88,
+            -8
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "f0ba1693a9252e4f44b6ded91b66dac8b06f3eb694757e00de4fdf55fbff8324"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            15,
+            -43,
+            43
+          ],
+          "midtones": [
+            -37,
+            -14,
+            -45
+          ],
+          "highlights": [
+            -46,
+            -41,
+            88
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "fd7fda2a48e225ac5f41647b75df9098e3d3478dd14da635f8d301bbec009451"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -2,
+            -74,
+            3
+          ],
+          "midtones": [
+            -89,
+            -76,
+            15
+          ],
+          "highlights": [
+            -89,
+            -10,
+            35
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "c020d8453a7c1285cd6922bc7372dd84c0015d56f95d32ba4d5822ac4a5d502b"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -7,
+            -3,
+            -71
+          ],
+          "midtones": [
+            -57,
+            34,
+            32
+          ],
+          "highlights": [
+            22,
+            21,
+            24
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "0224d59da459eeaf7bb706bcfe3bb5a7b45450918ec848c9a9592ffaab0816d9"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            18,
+            29,
+            -19
+          ],
+          "midtones": [
+            -15,
+            -25,
+            96
+          ],
+          "highlights": [
+            -12,
+            -36,
+            -24
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "486d6647c43ba25548a0683101a99de1030f0b4cec5d344a7b149c76aeed9f46"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -81,
+            91,
+            23
+          ],
+          "midtones": [
+            -84,
+            -39,
+            -35
+          ],
+          "highlights": [
+            9,
+            -81,
+            28
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "2d7c6c0522d69835e17939208f1638e2764c0f61a09ae959b21929d43b554681"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -3,
+            -34,
+            -90
+          ],
+          "midtones": [
+            29,
+            83,
+            -44
+          ],
+          "highlights": [
+            -80,
+            67,
+            32
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "659ae78519f7460c9d6e2bba16c0ed2611deee8cfc3ca8633c439655bb57eef2"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -48,
+            -54,
+            -100
+          ],
+          "midtones": [
+            -96,
+            38,
+            -89
+          ],
+          "highlights": [
+            -100,
+            -67,
+            34
+          ],
+          "preserve_luminosity": false
+        }
+      },
+      "pixel_sha256": "f2eebde87d533cc2a233600e5314293251c43f2ce442c57de81e0d8288b153aa"
+    },
+    {
+      "settings": {
+        "mode": "balance",
+        "balance": {
+          "shadows": [
+            -9,
+            -44,
+            -72
+          ],
+          "midtones": [
+            33,
+            97,
+            -70
+          ],
+          "highlights": [
+            49,
+            -24,
+            25
+          ],
+          "preserve_luminosity": true
+        }
+      },
+      "pixel_sha256": "2227acb5ebb85fa2cd49cbc61c444106c7da9529eee168c6d7b923298894eb92"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": 17,
+          "contrast": 10
+        },
+        "hsl": {
+          "hue": 13,
+          "saturation": -13,
+          "lightness": 25
+        },
+        "balance": {
+          "shadows": [
+            33,
+            -19,
+            -1
+          ],
+          "midtones": [
+            -2,
+            -28,
+            -16
+          ],
+          "highlights": [
+            -25,
+            33,
+            12
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 15,
+            "input_white": 253,
+            "gamma": 1.14,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 9,
+            "input_white": 251,
+            "gamma": 0.78,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 5,
+            "input_white": 242,
+            "gamma": 0.77,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 2,
+            "input_white": 253,
+            "gamma": 1.12,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "c7350473ccad55bc22b357bf77641f7c48352d2a965926d55b8b0a22ff3be68a"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -2,
+          "contrast": -12
+        },
+        "hsl": {
+          "hue": 38,
+          "saturation": 14,
+          "lightness": 23
+        },
+        "balance": {
+          "shadows": [
+            7,
+            5,
+            -4
+          ],
+          "midtones": [
+            -13,
+            -20,
+            33
+          ],
+          "highlights": [
+            -18,
+            -23,
+            -31
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 4,
+            "input_white": 247,
+            "gamma": 1.27,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 0,
+            "input_white": 243,
+            "gamma": 1.15,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 8,
+            "input_white": 255,
+            "gamma": 0.84,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 2,
+            "input_white": 247,
+            "gamma": 0.9,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "3d56e72391c62b8f2ae35363ef371bfd117646b0df53375185bd35d0ef257c79"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -16,
+          "contrast": 17
+        },
+        "hsl": {
+          "hue": -25,
+          "saturation": -16,
+          "lightness": 12
+        },
+        "balance": {
+          "shadows": [
+            25,
+            1,
+            21
+          ],
+          "midtones": [
+            -12,
+            18,
+            4
+          ],
+          "highlights": [
+            11,
+            -33,
+            16
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 8,
+            "input_white": 240,
+            "gamma": 0.86,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 13,
+            "input_white": 253,
+            "gamma": 1.26,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 3,
+            "input_white": 253,
+            "gamma": 1.18,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 10,
+            "input_white": 242,
+            "gamma": 0.96,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "61c0cc65b884703cb3ae3cc6021d0870aba0a52845ee3b4fbdb95488956d896f"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -37,
+          "contrast": 23
+        },
+        "hsl": {
+          "hue": 6,
+          "saturation": -20,
+          "lightness": 0
+        },
+        "balance": {
+          "shadows": [
+            -31,
+            11,
+            -30
+          ],
+          "midtones": [
+            11,
+            -31,
+            -5
+          ],
+          "highlights": [
+            7,
+            10,
+            -31
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 4,
+            "input_white": 240,
+            "gamma": 0.82,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 5,
+            "input_white": 244,
+            "gamma": 0.76,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 11,
+            "input_white": 252,
+            "gamma": 1.25,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 8,
+            "input_white": 245,
+            "gamma": 0.76,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "0cb0a02299eea12f51a3feaca1ab76104d1c6af0bb3b10cdbafbee179e56546c"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": 0,
+          "contrast": -1
+        },
+        "hsl": {
+          "hue": 43,
+          "saturation": 16,
+          "lightness": -24
+        },
+        "balance": {
+          "shadows": [
+            19,
+            -17,
+            -31
+          ],
+          "midtones": [
+            12,
+            24,
+            32
+          ],
+          "highlights": [
+            30,
+            6,
+            -12
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 9,
+            "input_white": 255,
+            "gamma": 1.3,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 3,
+            "input_white": 252,
+            "gamma": 1.04,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 4,
+            "input_white": 253,
+            "gamma": 0.78,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 12,
+            "input_white": 241,
+            "gamma": 1.19,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "0d8d0410320db7b5ce6a1af42f9cbe57204447ef853831884e29fb6d14b1bd61"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": 9,
+          "contrast": 29
+        },
+        "hsl": {
+          "hue": 44,
+          "saturation": -10,
+          "lightness": 19
+        },
+        "balance": {
+          "shadows": [
+            -32,
+            -12,
+            -30
+          ],
+          "midtones": [
+            29,
+            -6,
+            -15
+          ],
+          "highlights": [
+            0,
+            -23,
+            -18
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 2,
+            "input_white": 240,
+            "gamma": 1.25,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 1,
+            "input_white": 243,
+            "gamma": 1.02,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 2,
+            "input_white": 241,
+            "gamma": 1.14,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 14,
+            "input_white": 242,
+            "gamma": 0.88,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "bec224d28dcbcaa44b9c8b4f6be074e971089fcc18c7b3ac38bce5dcb0067cf5"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": 2,
+          "contrast": 0
+        },
+        "hsl": {
+          "hue": 7,
+          "saturation": 16,
+          "lightness": 7
+        },
+        "balance": {
+          "shadows": [
+            27,
+            -21,
+            -12
+          ],
+          "midtones": [
+            -32,
+            6,
+            17
+          ],
+          "highlights": [
+            -13,
+            -4,
+            -9
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 4,
+            "input_white": 242,
+            "gamma": 1.29,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 0,
+            "input_white": 254,
+            "gamma": 1.13,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 10,
+            "input_white": 252,
+            "gamma": 0.91,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 0,
+            "input_white": 246,
+            "gamma": 0.91,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "fd82504ea1488eb2be56bbb9ffbe3352eae765faf0594b05464ab8e30b4dd5ae"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -15,
+          "contrast": 27
+        },
+        "hsl": {
+          "hue": -33,
+          "saturation": 6,
+          "lightness": -23
+        },
+        "balance": {
+          "shadows": [
+            23,
+            -26,
+            -2
+          ],
+          "midtones": [
+            -30,
+            -30,
+            22
+          ],
+          "highlights": [
+            29,
+            -28,
+            -15
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 0,
+            "input_white": 250,
+            "gamma": 0.93,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 9,
+            "input_white": 243,
+            "gamma": 0.81,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 5,
+            "input_white": 244,
+            "gamma": 1.15,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 9,
+            "input_white": 251,
+            "gamma": 1.18,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "84ed260c6b4bf5b73729b676163ad3964f82096f6a625126424dbcacad7023d5"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": 33,
+          "contrast": 9
+        },
+        "hsl": {
+          "hue": -18,
+          "saturation": 18,
+          "lightness": -23
+        },
+        "balance": {
+          "shadows": [
+            -23,
+            -18,
+            -31
+          ],
+          "midtones": [
+            32,
+            -15,
+            -21
+          ],
+          "highlights": [
+            -14,
+            -3,
+            -30
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 11,
+            "input_white": 253,
+            "gamma": 0.98,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 1,
+            "input_white": 255,
+            "gamma": 0.91,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 8,
+            "input_white": 240,
+            "gamma": 1.15,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 11,
+            "input_white": 243,
+            "gamma": 0.97,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "2baaca10d37ef25d5b354174a0070269029fb9aa45d598cbff3f7fafa8b84717"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -10,
+          "contrast": -10
+        },
+        "hsl": {
+          "hue": -1,
+          "saturation": 13,
+          "lightness": -3
+        },
+        "balance": {
+          "shadows": [
+            -20,
+            -11,
+            -26
+          ],
+          "midtones": [
+            5,
+            20,
+            32
+          ],
+          "highlights": [
+            30,
+            6,
+            -25
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 6,
+            "input_white": 246,
+            "gamma": 0.9,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 1,
+            "input_white": 243,
+            "gamma": 0.96,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 5,
+            "input_white": 242,
+            "gamma": 1.18,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 3,
+            "input_white": 250,
+            "gamma": 1.3,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "2a79de3cca520cc88ea2c212ac46f2fdf83a94e2fa199fc6fbe5105494efec1c"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -4,
+          "contrast": -10
+        },
+        "hsl": {
+          "hue": -29,
+          "saturation": 20,
+          "lightness": 3
+        },
+        "balance": {
+          "shadows": [
+            -21,
+            -21,
+            6
+          ],
+          "midtones": [
+            -26,
+            17,
+            29
+          ],
+          "highlights": [
+            -1,
+            -13,
+            29
+          ],
+          "preserve_luminosity": false
+        },
+        "levels": [
+          {
+            "input_black": 1,
+            "input_white": 247,
+            "gamma": 1.06,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 4,
+            "input_white": 252,
+            "gamma": 1.27,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 14,
+            "input_white": 253,
+            "gamma": 1.04,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 13,
+            "input_white": 245,
+            "gamma": 0.85,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "724e1117ad0ab8f3a4bbaca61ab139dab308bfb159cd28a62d32957b853cd4a9"
+    },
+    {
+      "settings": {
+        "mode": "pipeline",
+        "tone": {
+          "brightness": -36,
+          "contrast": -7
+        },
+        "hsl": {
+          "hue": 44,
+          "saturation": 1,
+          "lightness": -4
+        },
+        "balance": {
+          "shadows": [
+            25,
+            -27,
+            33
+          ],
+          "midtones": [
+            18,
+            28,
+            -18
+          ],
+          "highlights": [
+            17,
+            6,
+            18
+          ],
+          "preserve_luminosity": true
+        },
+        "levels": [
+          {
+            "input_black": 13,
+            "input_white": 241,
+            "gamma": 0.7,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 11,
+            "input_white": 241,
+            "gamma": 1.15,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 4,
+            "input_white": 245,
+            "gamma": 1.23,
+            "output_black": 0,
+            "output_white": 255
+          },
+          {
+            "input_black": 1,
+            "input_white": 254,
+            "gamma": 1.17,
+            "output_black": 0,
+            "output_white": 255
+          }
+        ]
+      },
+      "pixel_sha256": "fd50bc356f9926616da76ef15ad2248faa274ba317c13675fcd4ddcf463cfce0"
+    }
+  ]
+}

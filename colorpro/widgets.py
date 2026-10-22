@@ -1,7 +1,17 @@
 """Shared, accessible desktop controls with platform-independent rendering."""
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+    QPixmap,
+    QPolygonF,
+)
 from PySide6.QtWidgets import QComboBox, QListView, QStyle, QStyledItemDelegate
 
 
@@ -33,7 +43,9 @@ class ChoiceDelegate(QStyledItemDelegate):
             x, y = option.rect.right() - 23, option.rect.center().y()
             painter.setPen(QPen(QColor("white" if selected else "#d83387"), 1.8))
             painter.drawPolyline(
-                QPolygonF([QPointF(x - 4, y), QPointF(x - 1, y + 3), QPointF(x + 5, y - 4)])
+                QPolygonF(
+                    [QPointF(x - 4, y), QPointF(x - 1, y + 3), QPointF(x + 5, y - 4)]
+                )
             )
         painter.restore()
 
@@ -103,7 +115,23 @@ def navigation_icon(kind, tint=None):
         if kind in {"previous", "next"}:
             painter.setPen(QPen(QColor(tint or "#8a8eb6"), 1.8))
             x0, x1 = (13, 8) if kind == "previous" else (8, 13)
-            painter.drawPolyline(QPolygonF([QPointF(x0, 5), QPointF(x1, 11), QPointF(x0, 17)]))
+            painter.drawPolyline(
+                QPolygonF([QPointF(x0, 5), QPointF(x1, 11), QPointF(x0, 17)])
+            )
+        elif kind == "down":
+            painter.drawPolyline(
+                QPolygonF([QPointF(5, 8), QPointF(11, 14), QPointF(17, 8)])
+            )
+        elif kind in {"undo", "redo"}:
+            if kind == "redo":
+                painter.translate(22, 0)
+                painter.scale(-1, 1)
+            path = QPainterPath(QPointF(5, 8))
+            path.cubicTo(17, 3, 22, 14, 15, 18)
+            painter.drawPath(path)
+            painter.drawPolyline(
+                QPolygonF([QPointF(5, 3), QPointF(4, 9), QPointF(10, 10)])
+            )
         elif kind == "compare":
             painter.drawRoundedRect(QRectF(3, 3, 16, 16), 3, 3)
             painter.drawLine(QPointF(11, 3), QPointF(11, 19))
@@ -148,10 +176,16 @@ def navigation_icon(kind, tint=None):
         elif kind == "refresh":
             painter.drawArc(QRectF(3, 3, 16, 16), 25 * 16, 135 * 16)
             painter.drawArc(QRectF(3, 3, 16, 16), 205 * 16, 135 * 16)
-            painter.drawPolyline(QPolygonF([QPointF(15, 6), QPointF(19, 7), QPointF(19, 3)]))
-            painter.drawPolyline(QPolygonF([QPointF(7, 16), QPointF(3, 15), QPointF(3, 19)]))
+            painter.drawPolyline(
+                QPolygonF([QPointF(15, 6), QPointF(19, 7), QPointF(19, 3)])
+            )
+            painter.drawPolyline(
+                QPolygonF([QPointF(7, 16), QPointF(3, 15), QPointF(3, 19)])
+            )
         elif kind == "play":
-            painter.drawPolygon(QPolygonF([QPointF(7, 4), QPointF(17, 11), QPointF(7, 18)]))
+            painter.drawPolygon(
+                QPolygonF([QPointF(7, 4), QPointF(17, 11), QPointF(7, 18)])
+            )
         elif kind == "plus":
             painter.drawLine(QPointF(11, 4), QPointF(11, 18))
             painter.drawLine(QPointF(4, 11), QPointF(18, 11))
@@ -167,30 +201,47 @@ def navigation_icon(kind, tint=None):
                     ]
                 )
             )
-            painter.drawPolyline(QPolygonF([QPointF(13, 3), QPointF(19, 3), QPointF(19, 9)]))
+            painter.drawPolyline(
+                QPolygonF([QPointF(13, 3), QPointF(19, 3), QPointF(19, 9)])
+            )
             painter.drawLine(QPointF(10, 12), QPointF(19, 3))
         elif kind == "fullscreen":
-            for x, y, dx, dy in ((3, 3, 5, 5), (19, 3, -5, 5), (3, 19, 5, -5), (19, 19, -5, -5)):
+            for x, y, dx, dy in (
+                (3, 3, 5, 5),
+                (19, 3, -5, 5),
+                (3, 19, 5, -5),
+                (19, 19, -5, -5),
+            ):
                 painter.drawPolyline(
                     QPolygonF([QPointF(x + dx, y), QPointF(x, y), QPointF(x, y + dy)])
                 )
         elif kind == "upload":
             painter.drawLine(QPointF(11, 3), QPointF(11, 15))
-            painter.drawPolyline(QPolygonF([QPointF(5, 9), QPointF(11, 3), QPointF(17, 9)]))
             painter.drawPolyline(
-                QPolygonF([QPointF(3, 13), QPointF(3, 20), QPointF(19, 20), QPointF(19, 13)])
+                QPolygonF([QPointF(5, 9), QPointF(11, 3), QPointF(17, 9)])
+            )
+            painter.drawPolyline(
+                QPolygonF(
+                    [QPointF(3, 13), QPointF(3, 20), QPointF(19, 20), QPointF(19, 13)]
+                )
             )
         elif kind == "updates":
             painter.drawLine(QPointF(11, 3), QPointF(11, 14))
-            painter.drawPolyline(QPolygonF([QPointF(6, 10), QPointF(11, 15), QPointF(16, 10)]))
             painter.drawPolyline(
-                QPolygonF([QPointF(4, 15), QPointF(4, 19), QPointF(18, 19), QPointF(18, 15)])
+                QPolygonF([QPointF(6, 10), QPointF(11, 15), QPointF(16, 10)])
+            )
+            painter.drawPolyline(
+                QPolygonF(
+                    [QPointF(4, 15), QPointF(4, 19), QPointF(18, 19), QPointF(18, 15)]
+                )
             )
         else:
             painter.drawEllipse(QPointF(11, 11), 8, 8)
             painter.setFont(QFont("Segoe UI", 11))
             painter.drawText(
-                QRectF(3, 2, 16, 18), Qt.AlignmentFlag.AlignCenter, "?" if kind == "help" else "i"
+                QRectF(3, 2, 16, 18),
+                Qt.AlignmentFlag.AlignCenter,
+                "?" if kind == "help" else "i",
             )
         painter.end()
         result.addPixmap(pix, QIcon.Mode.Normal, state)

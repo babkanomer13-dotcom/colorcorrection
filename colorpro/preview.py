@@ -266,14 +266,7 @@ class CompareView(QWidget):
             event.accept()
 
     def keyPressEvent(self, event):
-        if event.key() in {Qt.Key.Key_Plus, Qt.Key.Key_Equal}:
-            self.set_zoom(self.zoom * 1.2)
-        elif event.key() == Qt.Key.Key_Minus:
-            self.set_zoom(self.zoom / 1.2)
-        elif event.key() in {Qt.Key.Key_0, Qt.Key.Key_Home}:
-            self.reset_zoom()
-        else:
-            return super().keyPressEvent(event)
+        return super().keyPressEvent(event)
 
 
 class ComparePage(QWidget):
@@ -300,7 +293,7 @@ class ComparePage(QWidget):
         self.attention = QPushButton("Следующий на проверку")
         self.attention.clicked.connect(owner.select_attention)
         heading.addWidget(self.attention)
-        self.levels_button = QPushButton("Уровни")
+        self.levels_button = QPushButton("Коррекция")
         self.levels_button.setEnabled(False)
         self.levels_button.clicked.connect(lambda: self.editor.begin())
         heading.addWidget(self.levels_button)
@@ -364,6 +357,9 @@ class ComparePage(QWidget):
         self.editor = LevelsPanel(owner)
         self.view.pixel_picked.connect(self.editor.picked)
         workspace.addWidget(self.editor)
+        from colorpro.filmstrip import Filmstrip
+        self.filmstrip = Filmstrip(owner)
+        workspace.addWidget(self.filmstrip)
         layout.addLayout(workspace, 1)
         self.detail = QLabel("")
         self.detail.setObjectName("muted")
@@ -388,7 +384,7 @@ class ComparePage(QWidget):
             control.clicked.connect(callback)
             toolbar.addWidget(control)
             self.zoom_controls.append(control)
-        self.fullscreen = QPushButton("На весь экран · F11")
+        self.fullscreen = QPushButton("На весь экран")
         self.fullscreen.setIcon(navigation_icon("fullscreen", "#585b84"))
         self.fullscreen.clicked.connect(owner.toggle_review_fullscreen)
         toolbar.addWidget(self.fullscreen)
@@ -409,11 +405,13 @@ class ComparePage(QWidget):
         self.previous.setEnabled(index > 0)
         self.next.setEnabled(0 <= index < total - 1)
         self.count.setText(f"{index + 1} / {total}")
+        self.filmstrip.select(index)
         self.attention.setVisible(owner.next_attention.isEnabled())
         self.attention.setEnabled(owner.next_attention.isEnabled())
         for control in self.zoom_controls:
             control.setEnabled(self.view.before is not None)
         editing = self.editor.active
+        self.filmstrip.view.setEnabled(not editing)
         loading = bool(owner.preview_loader and owner.preview_loader.isRunning())
         output = owner.queue.results.get(index, {}).get("output")
         self.levels_button.setEnabled(bool(output) and not owner.busy() and not loading)
