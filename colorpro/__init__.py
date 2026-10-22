@@ -1,3 +1,3 @@
 """ColorPro desktop shell. The preserved V39 pipeline is a separate frozen runtime."""
 
-__version__ = "1.6.0"
+__version__ = "1.6.1"

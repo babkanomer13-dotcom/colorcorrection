@@ -110,13 +110,37 @@ def main():
     result = Path(window.queue.results[0]["output"])
     assert result.name == "synthetic_с.png"
     pump(lambda: not window.preview_loader.isRunning())
-    window.review.editor.begin()
+    window.compare.setFocus()
+    QTest.keyClick(window.compare, Qt.Key_U, Qt.ControlModifier)
     pump(
         lambda: (
             window.review.editor.session is not None
             and not window.review.editor.running()
         )
     )
+    editor = window.review.editor
+    pump(lambda: editor.pending_tool is None)
+    assert (
+        editor.hsl_section.body.isVisible() and editor.hsl_controls["hue"][0].hasFocus()
+    )
+    hue = editor.hsl_controls["hue"][0]
+    hue.lineEdit().setText("5")
+    QTest.keyClick(hue, Qt.Key_B, Qt.ControlModifier)
+    assert editor.hsl["hue"] == 5 and editor.balance_section.body.isVisible()
+    balance = editor.balance_controls[0][0]
+    QTest.keyClick(balance, Qt.Key_Up, Qt.ShiftModifier)
+    assert editor.balance["midtones"][0] == 10
+    QTest.keyClick(balance, Qt.Key_Z, Qt.ControlModifier | Qt.AltModifier)
+    assert editor.balance["midtones"][0] == 0
+    QTest.keyClick(balance, Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier)
+    assert editor.balance["midtones"][0] == 10
+    QTest.keyClick(balance, Qt.Key_L, Qt.ControlModifier)
+    black = editor.controls["input_black"][0]
+    QTest.keyClick(black, Qt.Key_3, Qt.AltModifier)
+    assert editor.channel.currentIndex() == 1
+    QTest.keyClick(black, Qt.Key_2, Qt.AltModifier)
+    assert editor.channel.currentIndex() == 0
+    editor.reset_all()
     window.review.editor.controls["gamma"][0].setValue(1.25)
     window.review.editor.change_hsl("lightness", 10)
     window.review.editor.change_balance(0, 12)
@@ -151,7 +175,7 @@ def main():
     window.close()
     pump(lambda: not window.isVisible())
     print(
-        "PASS: Qt5 dropdowns / queue / shortcut editing / async preview / manual tools and undo / full-size save / original safe"
+        "PASS: Qt5 dropdowns / queue / Photoshop tool hotkeys / numeric steps / channels / undo / shortcut editing / async preview / full-size save / original safe"
     )
 
 

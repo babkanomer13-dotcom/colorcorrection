@@ -49,8 +49,10 @@ class ShortcutPanel(QFrame):
         title.setObjectName("section")
         layout.addWidget(title)
         hint = QLabel(
+            "Инструменты — сочетания Photoshop CC 2014. Яркости / контрасту можно назначить своё. "
             "Нажмите сочетание в нужной строке. Очистите поле, чтобы отключить команду. "
-            "В текстовых полях клавиши работают как обычно."
+            "В параметрах ↑ / ↓ меняют значение, Shift ускоряет шаг в 10 раз; Tab переключает поле. "
+            "В обычных текстовых полях клавиши работают как обычно."
         )
         hint.setWordWrap(True)
         hint.setObjectName("muted")
@@ -110,6 +112,8 @@ class ShortcutPanel(QFrame):
             self.message.setText(
                 "Восстановлены стандартные клавиши: " + manager.load_error
             )
+        elif manager.load_notice:
+            self.message.setText(manager.load_notice)
 
     def populate(self, bindings):
         for action, edit in self.editors.items():

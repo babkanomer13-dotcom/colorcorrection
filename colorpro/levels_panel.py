@@ -82,10 +82,18 @@ class ToolSection(QWidget):
         self.toggle.setCheckable(True)
         self.toggle.setChecked(expanded)
         self.body = QWidget()
+        self.shortcut = QLabel()
+        self.shortcut.setObjectName("muted")
+        self.shortcut.setStyleSheet("font-size: 10px; padding-right: 4px;")
         self.content = QVBoxLayout(self.body)
         self.content.setContentsMargins(0, 0, 0, 6)
         self.content.setSpacing(6)
-        layout.addWidget(self.toggle)
+        heading = QHBoxLayout()
+        heading.setContentsMargins(0, 0, 0, 0)
+        heading.setSpacing(4)
+        heading.addWidget(self.toggle, 1)
+        heading.addWidget(self.shortcut)
+        layout.addLayout(heading)
         layout.addWidget(self.body)
         self.toggle.toggled.connect(self.expand)
         self.expand(expanded)
@@ -119,6 +127,7 @@ class LevelsPanel(QWidget):
         self.owner = owner
         self.active = False
         self.session = self.task = None
+        self.pending_tool = None
         self.preview_task = None
         self.preview_inflight = False
         self.preview_revision = 0
@@ -298,6 +307,7 @@ class LevelsPanel(QWidget):
         self.preserve_luminosity.toggled.connect(self.change_preserve_luminosity)
         balance_layout.addWidget(self.preserve_luminosity)
         self.hsl_controls = {}
+        self.hsl_section = None
         if hsl_available():
             self.hsl_section = ToolSection("Тон / насыщенность")
             layout.addWidget(self.hsl_section)
@@ -380,11 +390,17 @@ class LevelsPanel(QWidget):
         self.cancel.clicked.connect(self.cancel_edit)
         outer.addWidget(self.cancel)
         layout.addStretch()
+        self.key_help = QLabel()
+        self.key_help.setObjectName("muted")
+        self.key_help.setWordWrap(True)
+        layout.addWidget(self.key_help)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(45)
         self.timer.timeout.connect(self.render_preview)
         for _, slider in self.control_pairs():
+            # Tab moves between numeric fields; clicking still focuses sliders.
+            slider.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
             slider.sliderPressed.connect(self.begin_gesture)
             slider.sliderReleased.connect(self.end_gesture)
         self.refresh_controls()
@@ -408,9 +424,89 @@ class LevelsPanel(QWidget):
     def running(self):
         return bool(self.task and self.task.isRunning())
 
-    def begin(self):
+    def activate_tool(self, name):
+        """Open a tool without resetting an existing, unsaved editing session."""
+        if not self.active:
+            self.begin(tool=name)
+            return
+        if self.running() or self.session is None:
+            return
+        auto_modes = {"auto_color": 0, "auto_tone": 1, "auto_contrast": 2}
+        tool = "levels" if name in auto_modes else name
+        sections = {
+            "levels": (self.levels_section, self.controls["input_black"][0]),
+            "tone": (
+                self.tone_section,
+                self.tone_controls.get("brightness", (None,))[0],
+            ),
+            "balance": (self.balance_section, self.balance_controls[0][0]),
+            "hsl": (self.hsl_section, self.hsl_controls.get("hue", (None,))[0]),
+        }
+        section, field = sections.get(tool, (None, None))
+        if section is None:
+            return
+        self.pick(None)
+        for candidate, _ in sections.values():
+            if candidate is not None:
+                candidate.toggle.setChecked(candidate is section)
+        section.reveal()
+        field.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        field.selectAll()
+        if name in auto_modes:
+            self.auto_mode.setCurrentIndex(auto_modes[name])
+            self.auto_levels()
+
+    def refresh_shortcut_hints(self, manager):
+        for section, action in (
+            (self.levels_section, "edit"),
+            (self.tone_section, "tone"),
+            (self.balance_section, "balance"),
+            (self.hsl_section, "hsl"),
+        ):
+            if section is not None:
+                key = manager.bindings[action]
+                section.shortcut.setText(key)
+                section.shortcut.setVisible(bool(key))
+                section.toggle.setToolTip(
+                    section.caption + " · " + manager.hint(action)
+                )
+        for index, (caption, action) in enumerate(
+            (
+                ("Автоцвет", "auto_color"),
+                ("Автотон", "auto_tone"),
+                ("Автоконтраст", "auto_contrast"),
+            )
+        ):
+            key = manager.bindings[action]
+            self.auto_mode.setItemText(index, caption + (" · " + key if key else ""))
+        for index, (caption, action) in enumerate(
+            (
+                ("RGB · все каналы", "channel_rgb"),
+                ("Красный", "channel_red"),
+                ("Зелёный", "channel_green"),
+                ("Синий", "channel_blue"),
+            )
+        ):
+            key = manager.bindings[action]
+            self.channel.setItemText(index, caption + (" · " + key if key else ""))
+        self.key_help.setText(
+            manager.hint("increase")
+            + " / "
+            + manager.hint("decrease")
+            + " — шаг; "
+            + manager.hint("increase_fast")
+            + " / "
+            + manager.hint("decrease_fast")
+            + " — ×10. Tab — следующее поле."
+        )
+
+    def begin(self, tool="levels"):
         owner = self.owner
-        if owner.busy() or (owner.preview_loader and owner.preview_loader.isRunning()):
+        if (
+            self.active
+            or owner.busy()
+            or (owner.preview_loader and owner.preview_loader.isRunning())
+        ):
             return
         selected = owner.table.selectionModel().selectedRows()
         if not selected:
@@ -421,6 +517,7 @@ class LevelsPanel(QWidget):
             return
         owner.face_choice.setCurrentIndex(0)
         self.active = True
+        self.pending_tool = tool
         self.settings = defaults()
         self.tone = tone_defaults()
         self.hsl = hsl_defaults()
@@ -442,8 +539,15 @@ class LevelsPanel(QWidget):
             lambda: LevelsSession(record["output"], owner.queue.items[self.index].path)
         )
         self.task.completed.connect(self.loaded)
-        self.task.finished.connect(owner.sync_review)
+        self.task.finished.connect(self.finish_load)
         self.task.start()
+
+    def finish_load(self):
+        self.owner.sync_review()
+        pending, self.pending_tool = self.pending_tool, None
+        # QThread.finished, not completed: an auto action starts a second worker.
+        if self.active and self.session is not None and pending:
+            self.activate_tool(pending)
 
     def loaded(self, session, error):
         if error:
@@ -758,6 +862,7 @@ class LevelsPanel(QWidget):
         self.pick(None)
         self.timer.stop()
         self.active = False
+        self.pending_tool = None
         self.preview_revision += 1
         self.preview_pending = False
         self.session = None

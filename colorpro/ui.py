@@ -815,7 +815,9 @@ class Window(QMainWindow):
             text_layout.addWidget(label(text, "muted", True))
             row.addLayout(text_layout, 1)
             layout.addWidget(card)
-        shortcuts_link = button("Настроить горячие клавиши", self.show_shortcut_settings)
+        shortcuts_link = button(
+            "Настроить горячие клавиши", self.show_shortcut_settings
+        )
         layout.addWidget(shortcuts_link, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(
             label(
@@ -1421,6 +1423,7 @@ class Window(QMainWindow):
         self.refresh_shortcut_hints()
 
     def refresh_shortcut_hints(self):
+        self.review.editor.refresh_shortcut_hints(self.shortcuts)
         self.review.fullscreen.setText(
             "Вернуться" if self.isFullScreen() else "На весь экран"
         )
