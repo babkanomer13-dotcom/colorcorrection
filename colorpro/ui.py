@@ -1280,6 +1280,7 @@ class Window(QMainWindow):
         self.queue.remove_rows(selected)
         self.persist_queue()
         self.previews.clear()
+        self.preview_sizes.clear()
         self.reset_preview()
         self.update_queue()
         if self.queue.items:
@@ -1291,6 +1292,7 @@ class Window(QMainWindow):
             self.persist_queue()
             self.thumbnail_attempted.clear()
             self.previews.clear()
+            self.preview_sizes.clear()
             self.reset_preview()
             self.update_queue()
             self.stage.setText("Добавьте фотографии для новой серии.")

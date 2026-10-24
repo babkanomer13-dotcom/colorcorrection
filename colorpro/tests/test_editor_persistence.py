@@ -452,6 +452,21 @@ def test_edit_rejects_replaced_processed_base(tmp_path):
         store.load_edit(item, base.path)
 
 
+def test_repeat_processing_identical_base_keeps_edits(tmp_path):
+    from colorpro.levels import digest
+
+    store = Workspace(tmp_path / "state")
+    item = photo(tmp_path / "source")
+    first = photo(tmp_path / "job1")
+    second = photo(tmp_path / "job2")
+    assert first.path != second.path and digest(first.path) == digest(second.path)
+    store.save_edit(
+        item, first.path, snapshot(1.3), [snapshot()], [], base_sha=digest(first.path)
+    )
+    restored = store.load_edit(item, second.path, digest(second.path))
+    assert restored["current"][0][0]["gamma"] == 1.3 and len(restored["history"]) == 1
+
+
 def test_hidden_parameters_stay_hidden_after_frame_switch(app, desktop):
     editor = begin(app, desktop)
     editor.activate_tool("hsl")
@@ -485,6 +500,8 @@ def test_large_queue_and_bounded_caches(app, desktop, tmp_path):
         owner.preview_sizes[number] = (1500, 1000)
         owner.cache_preview(number, (b"preview", b"result"))
     assert len(owner.previews) == len(owner.preview_sizes) == 8
+    owner.clear_queue()
+    assert not owner.previews and not owner.preview_sizes
 
 
 def test_repeated_navigation_keeps_values_separate(app, desktop):

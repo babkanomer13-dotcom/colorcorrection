@@ -94,10 +94,15 @@ class Workspace:
         if (
             value.get("schema") != 1
             or value.get("identity") != identity(item)
-            or value.get("base") != str(Path(base).resolve())
+            or (
+                not value.get("base_sha256")
+                and value.get("base") != str(Path(base).resolve())
+            )
         ):
             raise ValueError("Сохранённые правки относятся к другому изображению")
         if value.get("base_sha256"):
+            # A repeat run can move an identical lossless base into a new job
+            # folder. Its pixels/metadata, not that incidental path, bind edits.
             if base_sha is None:
                 from colorpro.levels import digest
 
