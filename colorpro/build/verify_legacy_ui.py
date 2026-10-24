@@ -97,6 +97,8 @@ def main():
     assert window.compare.mode == 1
     window.compare.set_zoom(2)
     assert window.compare.zoom == 2
+    window.open_comparison()
+    app.processEvents()
     point = QPointF(window.compare.rect().center())
     wheel = QWheelEvent(
         point,
