@@ -12,8 +12,8 @@ def main():
     initialize()
     import numpy as np
     from PIL import Image
-    from PySide2.QtCore import QSettings, Qt
-    from PySide2.QtGui import QColor, QFontDatabase, QKeySequence, QPalette
+    from PySide2.QtCore import QPoint, QPointF, QSettings, Qt
+    from PySide2.QtGui import QColor, QFontDatabase, QKeySequence, QPalette, QWheelEvent
     from PySide2.QtTest import QTest
     from PySide2.QtWidgets import QApplication
 
@@ -97,6 +97,26 @@ def main():
     assert window.compare.mode == 1
     window.compare.set_zoom(2)
     assert window.compare.zoom == 2
+    point = QPointF(window.compare.rect().center())
+    wheel = QWheelEvent(
+        point,
+        point,
+        QPoint(),
+        QPoint(0, 120),
+        Qt.NoButton,
+        Qt.NoModifier,
+        Qt.NoScrollPhase,
+        False,
+    )
+    app.sendEvent(window.compare, wheel)
+    assert window.compare.zoom > 2
+    zoom = window.compare.zoom
+    center = QPointF(window.compare.center)
+    QTest.keyClick(window.compare, Qt.Key_Return)
+    assert window.compare.original_visible
+    QTest.keyClick(window.compare, Qt.Key_Return)
+    assert not window.compare.original_visible
+    assert window.compare.zoom == zoom and window.compare.center == center
     window.open_comparison()
     app.processEvents()
     assert window.review.view.before is not None
@@ -108,7 +128,7 @@ def main():
     window.escape_page()
     assert not window.isFullScreen()
     result = Path(window.queue.results[0]["output"])
-    assert result.name == "synthetic_с.png"
+    assert result.name == "synthetic.png"
     pump(lambda: not window.preview_loader.isRunning())
     window.compare.setFocus()
     QTest.keyClick(window.compare, Qt.Key_U, Qt.ControlModifier)
@@ -154,7 +174,12 @@ def main():
     pump(window.review.editor.preview_idle)
     window.grab().save(str(output / "levels.png"))
     window.review.editor.save_result()
-    pump(lambda: not window.review.editor.active and not window.review.editor.running())
+    pump(
+        lambda: (
+            not window.review.editor.running()
+            and window.queue.results[0].get("manually_edited")
+        )
+    )
     with Image.open(result) as edited:
         assert np.asarray(edited).mean() > 100
     with Image.open(photo) as untouched:
@@ -169,7 +194,12 @@ def main():
         )
     )
     window.review.editor.cancel_edit()
-    pump(lambda: not window.review.editor.preview_running())
+    pump(
+        lambda: (
+            not window.review.editor.active
+            and not window.review.editor.preview_running()
+        )
+    )
     window.remove_selected()
     assert not window.queue.items and result.is_file() and photo.is_file()
     window.close()

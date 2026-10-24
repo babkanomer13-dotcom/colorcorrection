@@ -39,6 +39,8 @@ ACTIONS = (
     Action("zoom_in", "Приблизить", "image", "Ctrl+="),
     Action("zoom_out", "Отдалить", "image", "Ctrl+-"),
     Action("fit", "Вписать фотографию в окно", "image", "Ctrl+0"),
+    Action("actual_size", "Масштаб 100%", "image", "Ctrl+1"),
+    Action("original", "Исходное / актуальный результат", "image", "Return"),
     Action("fullscreen", "Полноэкранный просмотр", "image", "F11"),
     Action("mode", "Рядом / разделитель", "image", "Ctrl+Tab"),
     # Keep the 1.6.0 ID so existing custom Levels bindings survive the upgrade.
@@ -57,7 +59,7 @@ ACTIONS = (
     Action("decrease", "Уменьшить выбранный параметр", "value", "Down"),
     Action("increase_fast", "Увеличить выбранный параметр ×10", "value", "Shift+Up"),
     Action("decrease_fast", "Уменьшить выбранный параметр ×10", "value", "Shift+Down"),
-    Action("save", "Сохранить правки", "editor", "Ctrl+S"),
+    Action("save", "Экспортировать фото", "editor", "Ctrl+S"),
     Action("undo", "Отменить правку", "editor", "Ctrl+Z"),
     Action("step_back", "Шаг назад по истории правок", "editor", "Ctrl+Alt+Z"),
     Action("redo", "Повторить правку", "editor", "Ctrl+Shift+Z"),
@@ -136,6 +138,8 @@ def validate_bindings(data):
 
 
 def physical_key(event):
+    if event.key() == Qt.Key.Key_Enter:
+        return enum_value(Qt.Key.Key_Return)
     native = event.nativeVirtualKey()
     if 0x41 <= native <= 0x5A or 0x30 <= native <= 0x39:
         return native
@@ -234,7 +238,7 @@ class ShortcutManager(QObject):
         if scope == "editor":
             return editor.active and editor.session is not None and not editor.running()
         if scope == "image":
-            return owner.pages.currentIndex() == owner.COMPARE and not editor.running()
+            return owner.pages.currentIndex() == owner.COMPARE
         if scope == "queue":
             return watched in (owner.table, owner.table.viewport()) and not owner.busy()
         return True
@@ -266,7 +270,8 @@ class ShortcutManager(QObject):
         numeric_command = (
             BY_ID[action].scope in {"tool", "value"}
             or action.startswith("channel_")
-            or action in {"save", "step_back", "redo"}
+            or action
+            in {"save", "step_back", "redo", "undo", "original", "next", "previous"}
         )
         # Plain letters/digits assigned by the user must still be typeable.
         modified = bool(
@@ -275,7 +280,7 @@ class ShortcutManager(QObject):
         )
         text_command = (
             physical_key(event)
-            in {Qt.Key.Key_A, Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_X, Qt.Key.Key_Z}
+            in {Qt.Key.Key_A, Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_X}
             and event.modifiers() == Qt.KeyboardModifier.ControlModifier
         )
         if (
@@ -293,6 +298,7 @@ class ShortcutManager(QObject):
                     }
                 )
                 or (modified and not text_command)
+                or action in {"original", "next", "previous"}
                 or Qt.Key.Key_F1 <= physical_key(event) <= Qt.Key.Key_F35
             )
         ):
@@ -368,8 +374,15 @@ class ShortcutManager(QObject):
             owner.compare.set_zoom(owner.compare.zoom / 1.2)
         elif action == "fit":
             owner.compare.reset_zoom()
+        elif action == "actual_size":
+            owner.compare.actual_size()
+        elif action == "original":
+            owner.compare.toggle_original()
+            owner.review.compare_toggle.setChecked(owner.compare.original_visible)
         elif action == "mode":
-            owner.review.mode.setCurrentIndex(1 - owner.review.mode.currentIndex())
+            owner.review.mode.setCurrentIndex(
+                (owner.review.mode.currentIndex() + 1) % 3
+            )
         elif action == "remove":
             owner.remove_selected()
         elif action == "select_all":

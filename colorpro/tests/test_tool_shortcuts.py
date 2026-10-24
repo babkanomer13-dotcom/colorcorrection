@@ -228,6 +228,9 @@ def test_russian_physical_tool_shortcuts_and_recording_guard(app, workspace):
     pump(app, lambda: owner.review.levels_button.isEnabled())
     editor.begin()
     ready(app, editor)
+    # Reopening now preserves expanded groups; establish a closed HSL group
+    # explicitly before testing that plain typing cannot activate it.
+    editor.activate_tool("levels")
     field = editor.controls["gamma"][0]
     field.setFocus()
     QTest.keyClick(field, Qt.Key.Key_U)

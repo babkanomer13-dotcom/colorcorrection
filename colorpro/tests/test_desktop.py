@@ -276,7 +276,7 @@ def test_redesigned_workspace_and_readable_popup(app, tmp_path):
     assert window.device.currentData() == "auto"
     body = window.findChild(QWidget, "body")
     assert body.grab().toImage().pixelColor(1, 1) == QColor("#f6f6fd")
-    assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("#f6f6fd")
+    assert window.compare.grab().toImage().pixelColor(10, 50) == QColor("#ffffff")
     window.show_page(window.SETTINGS)
     app.processEvents()
     for combo in (window.device, window.format):
@@ -290,7 +290,7 @@ def test_redesigned_workspace_and_readable_popup(app, tmp_path):
     window.open_comparison()
     app.processEvents()
     assert window.review.grab().toImage().pixelColor(1, 1) == QColor("#f6f6fd")
-    assert window.review.view.grab().toImage().pixelColor(10, 50) == QColor("#f6f6fd")
+    assert window.review.view.grab().toImage().pixelColor(10, 50) == QColor("#ffffff")
     window.close()
 
 
@@ -495,7 +495,7 @@ def test_neutral_comparison_canvas(app):
     app.processEvents()
     image = view.grab().toImage()
     assert image.pixelColor(10, 100) == QColor("#292929")
-    assert image.pixelColor(400, 100) == QColor("#f6f6fd")
+    assert image.pixelColor(400, 100) == QColor("#ffffff")
     assert image.pixelColor(195, 200) == QColor("white")
     view.close()
 
@@ -540,12 +540,12 @@ def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
     window.open_comparison()
     pump(app, lambda: window.compare.after is not None and not window.preview_loader.isRunning())
     output = Path(window.queue.results[0]["output"])
-    assert output.name == "Фото с пробелом_с.png"
+    assert output.name == "Фото с пробелом.png"
     initial = output.read_bytes()
     editor = window.review.editor
     editor.begin()
     pump(app, lambda: editor.session is not None and not editor.running())
-    assert editor.active and window.busy() and not window.table.isEnabled()
+    assert editor.active and window.busy() and window.table.isEnabled()
     editor.controls["gamma"][0].setValue(1.30)
     editor.render_preview()
     pump(app, editor.preview_idle)
@@ -555,17 +555,17 @@ def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
     assert edited != window.compare.after.toImage()
     assert output.read_bytes() == initial
     editor.cancel_edit()
-    pump(app, lambda: not window.preview_loader.isRunning())
+    pump(app, lambda: not editor.active and not window.preview_loader.isRunning())
     assert not window.busy() and output.read_bytes() == initial
     editor.begin()
     pump(app, lambda: editor.session is not None and not editor.running())
     editor.channel.setCurrentIndex(1)
     editor.controls["gamma"][0].setValue(0.89)
     editor.save_result()
-    pump(app, lambda: not editor.active and not editor.running())
+    pump(app, lambda: not editor.running() and window.queue.results[0].get("manually_edited"))
     assert output.read_bytes() != initial and source.read_bytes() == original
     assert window.queue.results[0]["manually_edited"]
     assert window.last_report["records"][0]["manual_levels"][1]["gamma"] == 0.89
-    assert window.table.isEnabled() and window.start.isEnabled()
+    assert window.table.isEnabled()
     window.close()
     pump(app, lambda: not window.isVisible())

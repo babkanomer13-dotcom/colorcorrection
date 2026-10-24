@@ -1,0 +1,23 @@
+Editor workspace checklist (requested 2026-10-24)
+
+Baseline: 1.6.1. Already present: batch progress and per-image errors, independent
+full-screen toggle and window geometry, bounded thumbnails/previews, configurable
+RU/EN shortcuts, exact CC2014 Levels/tone/HSL/balance. Curves remain excluded.
+
+Implementation / acceptance (not a release receipt):
+[x] Durable per-source settings, 100-step undo/redo, debounce and navigation flush
+[x] Crash/restart queue and edit recovery; visible errors, no silent data loss
+[x] Immutable processed base; explicit export separate from editor autosave
+[x] Beside-source ColorPro / remembered custom folder; no nested output ingestion
+[x] Pending/error-only queue processing, finished button opens editor
+[x] Enter original/result, stable canvas position/zoom, cursor-anchored wheel, 100%
+[x] Left collapsible multi-select filmstrip, right scrollable tool parameters
+[x] Top icon toolbar and collapsible main navigation; persisted layout
+[x] RU/EN keys including numerical fields and rapid frame switching
+[x] Failure/race/crash tests, 10,000-entry queue/cache and 30-transition stress tests
+[x] Qt6 and staged Qt5 UI verification (not an actual Windows 7 OS test)
+[ ] Both frozen packages, installer migration, unchanged V39 and source pixels
+[ ] Verified draft and publication through both auto-update channels
+
+The user's original photographs are never written. RetushPro is a read-only
+behavioral reference. Do not claim release completion until the last gates pass.

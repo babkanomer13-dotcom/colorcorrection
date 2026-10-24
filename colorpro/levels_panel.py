@@ -116,7 +116,7 @@ class ToolSection(QWidget):
         parent = self.parentWidget()
         while parent is not None:
             if isinstance(parent, QScrollArea):
-                parent.ensureWidgetVisible(self.body, 0, 8)
+                parent.ensureWidgetVisible(self.toggle, 0, 8)
                 return
             parent = parent.parentWidget()
 
@@ -128,6 +128,10 @@ class LevelsPanel(QWidget):
         self.active = False
         self.session = self.task = None
         self.pending_tool = None
+        self.departure = None
+        self.dirty = False
+        self.item = None
+        self.saved_snapshot = None
         self.preview_task = None
         self.preview_inflight = False
         self.preview_revision = 0
@@ -159,6 +163,7 @@ class LevelsPanel(QWidget):
         layout.setSpacing(6)
         title = QLabel("Коррекция")
         title.setObjectName("section")
+        title.hide()
         heading = QHBoxLayout()
         heading.addWidget(title, 1)
         self.auto = QPushButton("Применить")
@@ -382,11 +387,11 @@ class LevelsPanel(QWidget):
         self.status.setObjectName("muted")
         self.status.setWordWrap(True)
         outer.addWidget(self.status)
-        self.save = QPushButton("Сохранить результат")
+        self.save = QPushButton("Экспортировать фото")
         self.save.setObjectName("primary")
         self.save.clicked.connect(self.save_result)
         outer.addWidget(self.save)
-        self.cancel = QPushButton("Отмена")
+        self.cancel = QPushButton("Закрыть инструменты")
         self.cancel.clicked.connect(self.cancel_edit)
         outer.addWidget(self.cancel)
         layout.addStretch()
@@ -398,6 +403,25 @@ class LevelsPanel(QWidget):
         self.timer.setSingleShot(True)
         self.timer.setInterval(45)
         self.timer.timeout.connect(self.render_preview)
+        self.autosave = QTimer(self)
+        self.autosave.setSingleShot(True)
+        self.autosave.setInterval(350)
+        self.autosave.timeout.connect(self.flush_state)
+        for name, section in (
+            ("levels", self.levels_section),
+            ("tone", self.tone_section),
+            ("balance", self.balance_section),
+            ("hsl", self.hsl_section),
+        ):
+            if section is not None:
+                saved = owner.settings.value("tool_expanded_" + name)
+                if saved is not None:
+                    section.toggle.setChecked(str(saved).lower() == "true")
+                section.toggle.toggled.connect(
+                    lambda value, key=name: owner.settings.setValue(
+                        "tool_expanded_" + key, value
+                    )
+                )
         for _, slider in self.control_pairs():
             # Tab moves between numeric fields; clicking still focuses sliders.
             slider.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
@@ -421,6 +445,65 @@ class LevelsPanel(QWidget):
             copy.deepcopy(self.balance),
         )
 
+    def flush_state(self):
+        if not self.active or self.session is None:
+            return True
+        self.autosave.stop()
+        # Finish a number still being typed before committing a frame transition.
+        for spin, _ in self.control_pairs():
+            spin.interpretText()
+        current = self.snapshot()
+        try:
+            self.owner.workspace.save_edit(
+                self.item,
+                self.session.path,
+                current,
+                self.history,
+                self.future,
+                {
+                    "zoom": self.owner.compare.zoom,
+                    "center": [
+                        self.owner.compare.center.x(),
+                        self.owner.compare.center.y(),
+                    ],
+                },
+                base_sha=self.session.sha,
+            )
+        except (OSError, ValueError, TypeError) as error:
+            self.status.setText("Не удалось сохранить правки: " + str(error))
+            self.owner.error(self.status.text())
+            return False
+        self.saved_snapshot = copy.deepcopy(current)
+        self.dirty = False
+        self.status.setText("Правки сохранены · экспорт — отдельной кнопкой")
+        return True
+
+    def leave(self, callback):
+        self.departure = callback
+        self.timer.stop()
+        self.preview_pending = False
+        self.preview_revision += 1
+        if self.running() or self.preview_running():
+            self.status.setText("Завершение текущей операции…")
+            return
+        self.finish_departure()
+
+    def finish_departure(self):
+        if self.departure is None or self.running() or self.preview_running():
+            return
+        callback, self.departure = self.departure, None
+        if not self.flush_state():
+            self.owner.requested_photo = None
+            self.owner.table.blockSignals(True)
+            self.owner.table.selectionModel().blockSignals(True)
+            self.owner.table.selectRow(self.index)
+            self.owner.table.selectionModel().blockSignals(False)
+            self.owner.table.blockSignals(False)
+            self.owner.sync_review()
+            return
+        self.end(refresh=False, persist=False)
+        callback()
+
     def running(self):
         return bool(self.task and self.task.isRunning())
 
@@ -430,6 +513,12 @@ class LevelsPanel(QWidget):
             self.begin(tool=name)
             return
         if self.running() or self.session is None:
+            return
+        if name == "resume":
+            self.setVisible(self.owner.review.panel_toggle.isChecked())
+            self.owner.review.highlight_tool(
+                str(self.owner.settings.value("last_tool", "levels"))
+            )
             return
         auto_modes = {"auto_color": 0, "auto_tone": 1, "auto_contrast": 2}
         tool = "levels" if name in auto_modes else name
@@ -446,6 +535,11 @@ class LevelsPanel(QWidget):
         if section is None:
             return
         self.pick(None)
+        self.show()
+        self.owner.review.panel_toggle.setChecked(True)
+        self.owner.settings.setValue("parameters_visible", True)
+        self.owner.review.highlight_tool(tool)
+        self.owner.settings.setValue("last_tool", tool)
         for candidate, _ in sections.values():
             if candidate is not None:
                 candidate.toggle.setChecked(candidate is section)
@@ -500,23 +594,24 @@ class LevelsPanel(QWidget):
             + " — ×10. Tab — следующее поле."
         )
 
-    def begin(self, tool="levels"):
+    def begin(self, tool="resume"):
         owner = self.owner
-        if (
-            self.active
-            or owner.busy()
-            or (owner.preview_loader and owner.preview_loader.isRunning())
-        ):
+        if self.active or owner.busy():
+            return
+        if owner.preview_loader and owner.preview_loader.isRunning():
+            self.pending_tool = tool
             return
         selected = owner.table.selectionModel().selectedRows()
         if not selected:
             return
         self.index = selected[0].row()
+        self.item = owner.queue.items[self.index]
         record = owner.queue.results.get(self.index, {})
         if not record.get("output"):
             return
         owner.face_choice.setCurrentIndex(0)
         self.active = True
+        owner.edit_on_selection = True
         self.pending_tool = tool
         self.settings = defaults()
         self.tone = tone_defaults()
@@ -525,37 +620,61 @@ class LevelsPanel(QWidget):
         self.history.clear()
         self.future.clear()
         self.session = None
-        self.show()
+        self.setVisible(tool != "resume" or owner.review.panel_toggle.isChecked())
         owner.set_busy(True)
         owner.nav_status.setText("Ручная коррекция")
-        owner.table.setEnabled(False)
-        owner.navigation.hide()
-        for button in owner.nav_buttons:
-            button.setEnabled(False)
         owner.sync_review()
         self.status.setText("Загрузка полного размера…")
         self.set_controls_enabled(False)
-        self.task = LevelsTask(
-            lambda: LevelsSession(record["output"], owner.queue.items[self.index].path)
-        )
+        item = self.item
+        base = record.get("base_output") or record["output"]
+
+        def load():
+            session = LevelsSession(base, item.path)
+            saved = owner.workspace.load_edit(item, base, session.sha)
+            return session, saved
+
+        self.task = LevelsTask(load)
         self.task.completed.connect(self.loaded)
         self.task.finished.connect(self.finish_load)
         self.task.start()
 
     def finish_load(self):
         self.owner.sync_review()
+        if self.departure is not None:
+            self.pending_tool = None
+            self.finish_departure()
+            return
         pending, self.pending_tool = self.pending_tool, None
         # QThread.finished, not completed: an auto action starts a second worker.
         if self.active and self.session is not None and pending:
             self.activate_tool(pending)
+        self.finish_departure()
 
-    def loaded(self, session, error):
+    def loaded(self, result, error):
         if error:
             self.status.setText(error)
             self.cancel.setEnabled(True)
             return
-        self.session = session
-        self.status.setText("Сохраняется только результат. Исходник не изменяется.")
+        self.session, saved = result
+        self.owner.compare.native_size = (
+            self.session.pixels.shape[1],
+            self.session.pixels.shape[0],
+        )
+        if saved:
+            self.settings, self.tone, self.hsl, self.balance = copy.deepcopy(
+                saved["current"]
+            )
+            self.history = saved["history"]
+            self.future = saved["future"]
+            view = saved.get("view", {})
+            center = view.get("center", [0.5, 0.5])
+            if isinstance(center, list) and len(center) == 2:
+                self.owner.compare.center = QPointF(*center)
+            self.owner.compare.set_zoom(view.get("zoom", 1))
+        self.saved_snapshot = self.snapshot()
+        self.dirty = False
+        self.status.setText("Правки сохраняются автоматически. Оригинал не изменяется.")
         self.set_controls_enabled(True)
         self.refresh_controls()
         self.render_preview()
@@ -714,6 +833,7 @@ class LevelsPanel(QWidget):
         mode = self.auto_mode.currentIndex()
         self.task = LevelsTask(lambda: auto_settings(self.session.pixels, mode))
         self.task.completed.connect(self.auto_loaded)
+        self.task.finished.connect(self.finish_departure)
         self.task.start()
 
     def auto_loaded(self, result, error):
@@ -760,6 +880,9 @@ class LevelsPanel(QWidget):
         self.timer.stop()
         if self.session is None or not self.active:
             return
+        if self.snapshot() != self.saved_snapshot:
+            self.dirty = True
+            self.autosave.start()
         self.preview_revision += 1
         self.preview_pending = True
         self.start_preview()
@@ -786,6 +909,9 @@ class LevelsPanel(QWidget):
         from colorcorrection.levels_operator import apply_rgb_lut
 
         pixels = self.session.preview
+        high_detail = self.owner.compare.high_detail
+        if high_detail:
+            pixels = self.session.pixels
         settings, tone, hsl, balance = self.snapshot()
         enabled = self.preview.isChecked()
         revision = self.preview_revision
@@ -797,7 +923,12 @@ class LevelsPanel(QWidget):
             if enabled:
                 result = apply_rgb_lut(result, combined_lut(settings, tone, balance))
                 result = apply_hsl(result, hsl)
-            return revision, preview_bytes(result)
+            data = (
+                preview_bytes(result, max_size=None)
+                if high_detail
+                else preview_bytes(result)
+            )
+            return revision, data
 
         self.preview_task = LevelsTask(render)
         self.preview_task.completed.connect(self.preview_loaded)
@@ -822,22 +953,52 @@ class LevelsPanel(QWidget):
 
     def preview_finished(self):
         self.preview_inflight = False
-        self.start_preview()
+        if self.departure is not None:
+            self.finish_departure()
+        else:
+            self.start_preview()
         if self.owner.close_requested and not self.active:
             QTimer.singleShot(0, self.owner.close)
 
     def save_result(self):
         if self.running() or self.session is None:
             return
+        if not self.flush_state():
+            return
         self.timer.stop()
         self.pick(None)
-        settings = copy.deepcopy(self.settings)
-        tone = dict(self.tone)
-        hsl = dict(self.hsl)
-        balance = copy.deepcopy(self.balance)
+        snapshot = self.snapshot()
+        item, session, index = self.item, self.session, self.index
+        policy = self.owner.export_policy()
+        previous = dict(self.owner.queue.results.get(index, {}))
         self.set_controls_enabled(False)
         self.status.setText("Сохранение полного размера…")
-        self.task = LevelsTask(lambda: self.session.save(settings, tone, hsl, balance))
+
+        def export():
+            from colorpro.exporting import export_photo
+
+            pixels = session.render(snapshot)
+            data = export_photo(
+                item,
+                pixels,
+                session.metadata,
+                policy["format"],
+                policy["mode"],
+                policy["custom"],
+                policy["protected"],
+                previous,
+                registry=self.owner.workspace,
+            )
+            data.update(
+                base_output=str(session.path),
+                manual_levels=snapshot[0],
+                manual_brightness_contrast=snapshot[1],
+                manual_hsl=snapshot[2],
+                manual_color_balance=snapshot[3],
+            )
+            return data
+
+        self.task = LevelsTask(export)
         self.task.completed.connect(self.saved)
         self.task.finished.connect(self.finish_save)
         self.task.start()
@@ -852,16 +1013,27 @@ class LevelsPanel(QWidget):
 
     def finish_save(self):
         if self.save_success:
-            self.end()
+            self.status.setText("Фото экспортировано. Правки и история сохранены.")
+        self.set_controls_enabled(True)
+        self.finish_departure()
 
     def cancel_edit(self):
-        if not self.running():
-            self.end()
+        self.owner.edit_on_selection = False
+        self.leave(self.owner.selection_changed)
 
-    def end(self):
+    def end(self, refresh=True, persist=True):
+        if (
+            persist
+            and self.active
+            and self.session is not None
+            and not self.flush_state()
+        ):
+            return
         self.pick(None)
         self.timer.stop()
+        self.autosave.stop()
         self.active = False
+        self.departure = None
         self.pending_tool = None
         self.preview_revision += 1
         self.preview_pending = False
@@ -873,6 +1045,16 @@ class LevelsPanel(QWidget):
         for button in owner.nav_buttons:
             button.setEnabled(True)
         owner.set_busy(False)
-        owner.previews.clear()
+        if (
+            self.item is not None
+            and owner.compare.before
+            and owner.compare.after
+            and not owner.compare.high_detail
+        ):
+            record = owner.queue.results.get(self.index, {})
+            key = (self.item.key, record.get("output"), None)
+            owner.cache_preview(key, (owner.compare.before, owner.compare.after))
         owner.preview_key = owner.face_record_key = None
-        owner.selection_changed()
+        if refresh:
+            owner.edit_on_selection = False
+            owner.selection_changed()

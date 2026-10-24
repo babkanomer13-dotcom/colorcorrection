@@ -74,6 +74,7 @@ def test_hotkeys_dont_steal_text_or_number_input(app, tmp_path):
     owner = window(app, tmp_path)
     try:
         owner.show_page(owner.SETTINGS)
+        owner.save_mode.setCurrentIndex(owner.save_mode.findData("custom"))
         owner.output.setFocus()
         app.processEvents()
         before = owner.pages.currentIndex()
@@ -290,6 +291,7 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
     pixels = np.random.default_rng(71).integers(0, 256, (60, 80, 3), dtype=np.uint8)
     editor.session = SimpleNamespace(preview=pixels, histogram=histogram(pixels))
     editor.active = True
+    monkeypatch.setattr(editor, "flush_state", lambda: True)
     started, release = threading.Event(), threading.Event()
     encode = panel_module.preview_bytes
 

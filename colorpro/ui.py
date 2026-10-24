@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QAbstractTableModel,
+    QPropertyAnimation,
     QItemSelectionModel,
     QModelIndex,
     QSettings,
@@ -62,6 +63,7 @@ from colorpro.preview import ComparePage, PreviewWorker
 from colorpro.shortcuts import ShortcutManager
 from colorpro.shortcut_panel import ShortcutPanel
 from colorpro.widgets import combo_box, navigation_icon
+from colorpro.workspace import Workspace
 
 STATUS = {
     "queued": "В очереди",
@@ -233,14 +235,21 @@ class ImportWorker(QThread):
     result = Signal(object, object)
     failed = Signal(str)
 
-    def __init__(self, paths, existing):
+    def __init__(self, paths, existing, excluded=(), workspace=None):
         super().__init__()
         self.paths, self.existing = paths, existing
+        self.excluded = excluded
+        self.workspace = workspace
 
     def run(self):
         try:
+            excluded = list(self.excluded)
+            if self.workspace is not None:
+                excluded.extend(
+                    self.workspace.export_paths(self.isInterruptionRequested)
+                )
             items, errors = collect_inputs(
-                self.paths, self.existing, self.isInterruptionRequested
+                self.paths, self.existing, self.isInterruptionRequested, excluded
             )
             self.result.emit(items, errors)
         except Exception as error:
@@ -251,11 +260,14 @@ class BatchWorker(QThread):
     event = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, items, output, model, device, fmt, engine_factory=None):
+    def __init__(
+        self, items, output, model, device, fmt, engine_factory=None, policy=None
+    ):
         super().__init__()
         self.args = (list(items), output, model, device, fmt)
         self.control = Control()
         self.engine_factory = engine_factory
+        self.policy = policy
 
     def run(self):
         try:
@@ -264,15 +276,30 @@ class BatchWorker(QThread):
                 self.control,
                 self.event.emit,
                 engine_factory=self.engine_factory,
+                export_policy=self.policy,
             )
         except Exception as error:
             self.failed.emit(str(error))
 
 
+class RestoreWorker(QThread):
+    loaded = Signal(object, str)
+
+    def __init__(self, workspace):
+        super().__init__()
+        self.workspace = workspace
+
+    def run(self):
+        try:
+            self.loaded.emit(self.workspace.load_queue(), "")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self.loaded.emit(None, str(error))
+
+
 class Window(QMainWindow):
     PHOTOS, COMPARE, SETTINGS, UPDATES, HELP, PROFILE = range(6)
 
-    def __init__(self, engine_factory=None, settings=None):
+    def __init__(self, engine_factory=None, settings=None, workspace=None):
         super().__init__()
         self.setWindowTitle("ColorPro")
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
@@ -284,6 +311,27 @@ class Window(QMainWindow):
         self.settings = (
             settings if settings is not None else QSettings("ColorPro", "Desktop")
         )
+        if workspace is None:
+            if settings is not None:
+                root = Path(settings.fileName()).with_suffix(".workspace")
+            else:
+                from colorpro.config import load_config
+
+                root = Path(load_config()["state_root"]) / "workspace"
+            workspace = Workspace(root)
+        self.workspace = workspace
+        self.restorer = None
+        self.restore_error = False
+        self.batch_indices = []
+        self.preview_sizes = {}
+        self.detail_loader = None
+        self.detail_pending = False
+        self.edit_on_selection = False
+        self.requested_photo = None
+        self.queue_timer = QTimer(self)
+        self.queue_timer.setSingleShot(True)
+        self.queue_timer.setInterval(350)
+        self.queue_timer.timeout.connect(self.persist_queue)
         self.shortcuts = ShortcutManager(self)
         self.worker = self.importer = None
         self.output_folder = None
@@ -326,6 +374,11 @@ class Window(QMainWindow):
         brand_text.addWidget(label("ColorPro", "brand"))
         brand_text.addWidget(label("AI для ваших фото", "brandTagline"))
         brand.addLayout(brand_text)
+        self.brand_labels = [
+            brand_text.itemAt(i).widget() for i in range(brand_text.count())
+        ]
+        self.sidebar_mark = mark
+        self.sidebar_layout = left
         left.addLayout(brand)
         left.addSpacing(26)
         separator = QFrame()
@@ -333,6 +386,9 @@ class Window(QMainWindow):
         separator.setFixedHeight(1)
         left.addWidget(separator)
         left.addSpacing(9)
+        self.sidebar_toggle = button("‹", self.toggle_sidebar, "nav")
+        self.sidebar_toggle.setToolTip("Свернуть меню")
+        left.addWidget(self.sidebar_toggle)
         self.nav_buttons = []
         for index, (text, kind) in enumerate(
             (
@@ -348,6 +404,8 @@ class Window(QMainWindow):
             nav.setAutoExclusive(True)
             nav.setIcon(navigation_icon(kind))
             nav.setIconSize(QSize(22, 22))
+            nav.setProperty("fullTitle", text)
+            nav.setToolTip(text)
             left.addWidget(nav)
             self.nav_buttons.append(nav)
         self.nav_buttons[0].setChecked(True)
@@ -391,6 +449,8 @@ class Window(QMainWindow):
         self.add = button("Добавить", self.pick_files, "primary")
         self.add.setIcon(navigation_icon("plus", "white"))
         self.add.setToolTip("Добавить фотографии или ZIP")
+        self.add_folder = button("Папка", self.pick_folder, "small")
+        headline.addWidget(self.add_folder)
         for control in (self.remove, self.clear, self.add):
             headline.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
         main.addLayout(headline)
@@ -573,7 +633,120 @@ class Window(QMainWindow):
             lambda version: self.updates.setText("Обновления  •")
         )
         self.update_page.idle.connect(self.update_idle)
+        self.sidebar_collapsed = (
+            str(self.settings.value("sidebar_collapsed", "false")).lower() == "true"
+        )
+        self.apply_sidebar()
+        self.queue.rowsInserted.connect(lambda *args: self.queue_timer.start())
+        self.queue.modelReset.connect(lambda *args: self.queue_timer.start())
+        self.queue.dataChanged.connect(
+            lambda first, last, *args: (
+                self.refresh_start_button()
+                if first.column() <= 3 <= last.column()
+                else None
+            )
+        )
+        QTimer.singleShot(0, self.restore_workspace)
         QTimer.singleShot(8000, self.auto_check_updates)
+
+    def persist_queue(self):
+        self.queue_timer.stop()
+        if self.restore_error or (self.restorer and self.restorer.isRunning()):
+            return True  # Never replace an unread/corrupt queue with an empty one.
+        try:
+            self.workspace.save_queue(
+                self.queue.items, self.queue.results, self.table.currentIndex().row()
+            )
+            return True
+        except (OSError, ValueError) as error:
+            self.error("Не удалось сохранить очередь: " + str(error))
+            return False
+
+    def restore_workspace(self):
+        # Tests/imports can have populated the window before its first event loop.
+        if self.queue.items or self.importer or self.worker or not self.isVisible():
+            return
+        self.set_busy(True)
+        self.restorer = RestoreWorker(self.workspace)
+        self.restorer.loaded.connect(self.workspace_restored)
+        self.restorer.finished.connect(self.restore_finished)
+        self.restorer.start()
+
+    def workspace_restored(self, value, error):
+        if error:
+            self.restore_error = True
+            self.error(
+                "Не удалось восстановить рабочее состояние. Сохранённые файлы не изменены: "
+                + error
+            )
+            return
+        items, results, selected = value
+        if items:
+            self.queue.reset(items)
+            self.queue.results = results
+            self.update_queue()
+            self.select_photo(max(0, min(len(items) - 1, selected)))
+            self.stage.setText("Предыдущая очередь и правки восстановлены")
+
+    def restore_finished(self):
+        self.set_busy(False)
+        self.request_thumbnails()
+        if self.close_requested:
+            self.close()
+
+    def export_policy(self):
+        return dict(
+            mode=self.save_mode.currentData(),
+            custom=self.output.text().strip(),
+            format=self.format.currentData(),
+            workspace=str(self.workspace.root),
+            protected=[item.path for item in self.queue.items],
+        )
+
+    def toggle_sidebar(self):
+        self.sidebar_collapsed = not self.sidebar_collapsed
+        self.settings.setValue("sidebar_collapsed", self.sidebar_collapsed)
+        self.apply_sidebar(animate=True)
+
+    def apply_sidebar(self, animate=False):
+        collapsed = self.sidebar_collapsed
+        width = 78 if collapsed else 222
+        for widget in self.brand_labels:
+            widget.setVisible(not collapsed)
+        self.sidebar_mark.setFixedSize(46 if collapsed else 60, 60)
+        self.sidebar_mark.setPixmap(brand_icon().pixmap(42 if collapsed else 60, 60))
+        self.profile_button.show()
+        self.nav_status.setVisible(not collapsed)
+        self.sidebar_layout.setContentsMargins(
+            8 if collapsed else 14, 28, 8 if collapsed else 14, 20
+        )
+        for nav in self.nav_buttons[:5]:
+            nav.setText("" if collapsed else nav.property("fullTitle"))
+        self.sidebar_toggle.setText("" if collapsed else "Свернуть меню")
+        self.sidebar_toggle.setIcon(
+            navigation_icon("next" if collapsed else "previous")
+        )
+        self.sidebar_toggle.setIconSize(QSize(20, 20))
+        self.sidebar_toggle.setToolTip(
+            "Развернуть меню" if collapsed else "Свернуть меню"
+        )
+        self.sidebar_toggle.setAccessibleName(self.sidebar_toggle.toolTip())
+        if animate:
+            if hasattr(self, "sidebar_animation"):
+                self.sidebar_animation.stop()
+            self.sidebar_animation = QPropertyAnimation(
+                self.navigation, b"maximumWidth", self
+            )
+            self.navigation.setMinimumWidth(0)
+            self.sidebar_animation.setDuration(160)
+            self.sidebar_animation.setStartValue(self.navigation.width())
+            self.sidebar_animation.setEndValue(width)
+            self.sidebar_animation.finished.connect(
+                lambda: self.navigation.setFixedWidth(width)
+            )
+            self.sidebar_animation.start()
+        else:
+            self.navigation.setFixedWidth(width)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -582,6 +755,8 @@ class Window(QMainWindow):
             self.resize_grip.setVisible(
                 not self.isMaximized() and not self.isFullScreen()
             )
+        if getattr(self, "review", None) is not None:
+            self.review.detail.setVisible(self.width() >= 1100)
 
     def queue_clicked(self, index):
         if index.column() != 4:
@@ -743,6 +918,16 @@ class Window(QMainWindow):
             "JPEG: качество 100%, цвет 4:4:4. Для сохранения без потерь выберите PNG."
         )
         save.addWidget(self.format)
+        self.save_mode = combo_box()
+        self.save_mode.addItem("Рядом с исходниками · папка ColorPro", "beside")
+        self.save_mode.addItem("Выбранная папка", "custom")
+        self.save_mode.setAccessibleName("Режим экспорта")
+        saved_mode = self.save_mode.findData(
+            self.settings.value("export_mode", "beside")
+        )
+        self.save_mode.setCurrentIndex(max(0, saved_mode))
+        self.save_mode.currentIndexChanged.connect(self.export_mode_changed)
+        save.addWidget(self.save_mode)
         save.addSpacing(4)
         save.addWidget(label("Папка результатов", "muted"))
         row = QHBoxLayout()
@@ -758,9 +943,11 @@ class Window(QMainWindow):
         self.choose_output = button("Выбрать…", self.pick_output)
         row.addWidget(self.choose_output)
         save.addLayout(row)
+        self.export_mode_changed()
         save.addWidget(
             label(
-                "Каждая серия — в отдельной папке. Исходники не изменяются.",
+                "Готовые фото — в подпапке ColorPro рядом с каждым исходником или в выбранном каталоге. "
+                "Правки редактора сохраняются отдельно и автоматически.",
                 "muted",
                 True,
             )
@@ -793,14 +980,15 @@ class Window(QMainWindow):
             (
                 "02",
                 "Обработайте серию",
-                "Нажмите «Обработать серию». Во время работы доступны пауза и остановка.",
+                "Нажмите «Начать цветокоррекцию». Готовые кадры повторно не обрабатываются; "
+                "доступны пауза и остановка.",
             ),
             (
                 "03",
                 "Сравните и сохраните",
-                "Откройте «До / после» и выберите кадр в ленте справа. "
-                "Кнопка «Коррекция» открывает ручные инструменты. Правки применяются "
-                "только после нажатия «Сохранить результат»; исходник не меняется. "
+                "Выберите кадр в ленте слева и инструмент сверху. Enter переключает исходник "
+                "и актуальный результат. Правки и история сохраняются автоматически; "
+                "«Экспортировать фото» обновляет готовый файл. Исходник не меняется. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
         ):
@@ -874,6 +1062,7 @@ class Window(QMainWindow):
             and self.review.editor.active
             and index != self.COMPARE
         ):
+            self.review.editor.leave(lambda: self.show_page(index))
             return
         if self.isFullScreen() and index != self.COMPARE:
             self.leave_review_fullscreen()
@@ -913,6 +1102,7 @@ class Window(QMainWindow):
     def busy(self):
         return bool(
             self.install_pending
+            or (self.restorer and self.restorer.isRunning())
             or (self.review is not None and self.review.editor.active)
             or (self.worker and self.worker.isRunning())
             or (self.importer and self.importer.isRunning())
@@ -933,6 +1123,23 @@ class Window(QMainWindow):
             self.settings.setValue("input", str(Path(files[0]).parent))
             self.import_files(files)
 
+    def pick_folder(self):
+        if self.busy():
+            return
+        path = QFileDialog.getExistingDirectory(
+            self, "Добавить папку фотографий", str(self.settings.value("input", ""))
+        )
+        if path:
+            self.settings.setValue("input", path)
+            self.import_files([path])
+
+    def export_mode_changed(self, *args):
+        mode = self.save_mode.currentData()
+        self.settings.setValue("export_mode", mode)
+        if hasattr(self, "output"):
+            self.output.setEnabled(mode == "custom")
+            self.choose_output.setEnabled(mode == "custom")
+
     def pick_output(self):
         path = QFileDialog.getExistingDirectory(
             self, "Куда сохранять результаты", self.output.text()
@@ -950,14 +1157,26 @@ class Window(QMainWindow):
         self.stage.setText("Проверка файлов и содержимого ZIP…")
         self.progress.setRange(0, 0)
         self.set_busy(True)
-        self.importer = ImportWorker(paths, list(self.queue.items))
+        excluded = [r["output"] for r in self.queue.results.values() if r.get("output")]
+        self.importer = ImportWorker(
+            paths, list(self.queue.items), excluded, self.workspace
+        )
         self.importer.result.connect(self.imported)
         self.importer.failed.connect(self.error)
         self.importer.finished.connect(self.import_finished)
         self.importer.start()
 
     def imported(self, items, errors):
+        if self.restore_error:
+            # Keep the damaged session for recovery before starting a new one.
+            try:
+                self.workspace.preserve_failed_queue()
+                self.restore_error = False
+            except OSError as error:
+                self.error("Не удалось сохранить прежнюю сессию: " + str(error))
+                return
         self.queue.add(items)
+        self.persist_queue()
         self.update_queue()
         self.stage.setText(
             f"Добавлено: {len(items)}. Всего в очереди: {len(self.queue.items)}."
@@ -991,7 +1210,23 @@ class Window(QMainWindow):
         self.start.setEnabled(bool(count) and not self.busy())
         self.clear.setEnabled(bool(count) and not self.busy())
         self.update_summary()
+        self.refresh_start_button()
         self.request_thumbnails()
+
+    def pending_indices(self):
+        return [
+            i
+            for i in range(len(self.queue.items))
+            if self.queue.results.get(i, {}).get("status")
+            not in {"corrected", "partial", "needs_attention"}
+        ]
+
+    def refresh_start_button(self):
+        self.start.setText(
+            "Перейти"
+            if self.queue.items and not self.pending_indices()
+            else "Начать цветокоррекцию"
+        )
 
     def update_summary(self):
         states = [record.get("status") for record in self.queue.results.values()]
@@ -1014,6 +1249,7 @@ class Window(QMainWindow):
         self.next_attention.setEnabled(bool(attention or errors))
         self.next_attention.setVisible(bool(attention or errors))
         self.sync_review()
+        self.refresh_start_button()
 
     def select_attention(self):
         rows = self.table.selectionModel().selectedRows()
@@ -1042,6 +1278,7 @@ class Window(QMainWindow):
         if not selected:
             return
         self.queue.remove_rows(selected)
+        self.persist_queue()
         self.previews.clear()
         self.reset_preview()
         self.update_queue()
@@ -1051,6 +1288,7 @@ class Window(QMainWindow):
     def clear_queue(self):
         if not self.busy():
             self.queue.reset([])
+            self.persist_queue()
             self.thumbnail_attempted.clear()
             self.previews.clear()
             self.reset_preview()
@@ -1064,6 +1302,7 @@ class Window(QMainWindow):
     def set_busy(self, active):
         for widget in (
             self.add,
+            self.add_folder,
             self.empty_add,
             self.remove,
             self.clear,
@@ -1071,6 +1310,7 @@ class Window(QMainWindow):
             self.format,
             self.output,
             self.choose_output,
+            self.save_mode,
         ):
             widget.setEnabled(not active)
         self.start.setEnabled(not active and bool(self.queue.items))
@@ -1084,11 +1324,18 @@ class Window(QMainWindow):
             else "Параметры сохраняются автоматически."
         )
         self.nav_status.setText("Обработка…" if active else "")
+        if not active:
+            self.export_mode_changed()
+            self.refresh_start_button()
 
     def start_batch(self):
         if self.busy() or not self.queue.items:
             return
-        if not self.output.text().strip():
+        indices = self.pending_indices()
+        if not indices:
+            self.open_comparison()
+            return
+        if self.save_mode.currentData() == "custom" and not self.output.text().strip():
             self.error("Выберите папку для результатов")
             return
         self.settings.setValue("output", self.output.text())
@@ -1097,13 +1344,11 @@ class Window(QMainWindow):
             ("format", self.format),
         ):
             self.settings.setValue(name, widget.currentData())
-        self.queue.reset()
+        self.batch_indices = indices
         self.previews.clear()
         self.reset_preview()
         self.update_summary()
         self.last_report = None
-        self.output_folder = None
-        self.open_folder.setEnabled(False)
         self.set_busy(True)
         self.progress.setRange(0, 0)
         self.progress.show()
@@ -1117,12 +1362,13 @@ class Window(QMainWindow):
         self.cancel.show()
         self.start.hide()
         self.worker = BatchWorker(
-            self.queue.items,
-            self.output.text().strip(),
+            [self.queue.items[i] for i in indices],
+            str(self.workspace.jobs),
             "v39",
             self.device.currentData(),
             self.format.currentData(),
             self.engine_factory,
+            self.export_policy(),
         )
         self.worker.event.connect(self.batch_event)
         self.worker.failed.connect(self.error)
@@ -1130,14 +1376,20 @@ class Window(QMainWindow):
         self.worker.start()
 
     def batch_event(self, event):
+        event = dict(event)
+        if self.batch_indices:
+            if "index" in event:
+                event["index"] = self.batch_indices[event["index"]]
+            if "record" in event:
+                event["record"] = dict(event["record"])
+                event["record"]["index"] = self.batch_indices[event["record"]["index"]]
         kind = event["type"]
         if kind == "folder":
-            self.output_folder = event["path"]
-            self.open_folder.setEnabled(True)
+            pass  # This is the durable processing workspace, not the export folder.
         elif kind == "stage":
             self.stage.setText(event["text"])
         elif kind == "ready":
-            self.progress.setRange(0, len(self.queue.items))
+            self.progress.setRange(0, len(self.batch_indices) or len(self.queue.items))
             self.progress.setValue(0)
             self.stage.setText("Обработка фотографий…")
         elif kind == "paused":
@@ -1160,6 +1412,10 @@ class Window(QMainWindow):
         elif kind == "result":
             self.queue.update(event["record"]["index"], event["record"])
             record = event["record"]
+            self.persist_queue()
+            if record.get("output"):
+                self.output_folder = str(Path(record["output"]).parent)
+                self.open_folder.setEnabled(True)
             if self.batch_preview and self.batch_preview[0] == record["index"]:
                 key = (
                     self.queue.items[record["index"]].key,
@@ -1187,6 +1443,14 @@ class Window(QMainWindow):
                 self.stage.setText("Переход на паузу… Готовые результаты сохранены.")
         elif kind == "finished":
             report = event["report"]
+            if self.batch_indices:
+                report = dict(
+                    report,
+                    records=[
+                        dict(r, index=self.batch_indices[r["index"]])
+                        for r in report["records"]
+                    ],
+                )
             self.last_report = report
             for index in range(len(self.queue.items)):
                 if self.queue.results.get(index, {}).get("status", "queued") in {
@@ -1209,6 +1473,7 @@ class Window(QMainWindow):
                 f"{report['processed']} / {report['total']} · {duration(report['elapsed_seconds'])}"
             )
             self.update_summary()
+            self.persist_queue()
             if report.get("error"):
                 self.preview_detail.setText(report["error"])
 
@@ -1217,6 +1482,7 @@ class Window(QMainWindow):
         self.cancel.hide()
         self.start.show()
         self.set_busy(False)
+        self.batch_indices = []
         self.selection_changed()
         self.request_thumbnails()
         if self.close_requested:
@@ -1247,6 +1513,9 @@ class Window(QMainWindow):
 
     def selection_changed(self, *args):
         if self.review is not None and self.review.editor.active:
+            rows = self.table.selectionModel().selectedRows()
+            if rows and rows[0].row() != self.review.editor.index:
+                self.review.editor.leave(self.selection_changed)
             return
         selected = self.table.selectionModel().selectedRows()
         index = selected[0].row() if selected else -1
@@ -1257,6 +1526,7 @@ class Window(QMainWindow):
             self.reset_preview()
             return
         item = self.queue.items[index]
+        self.queue_timer.start()
         self.sync_review()
         faces = [
             tuple(face["native_bbox"])
@@ -1289,12 +1559,74 @@ class Window(QMainWindow):
         if key in self.previews:
             before, after = self.previews[key]
             self.show_preview(before, after)
+            if self.edit_on_selection and record.get("output"):
+                self.review.editor.begin(tool="resume")
         else:
             self.compare.clear("Загрузка исходника…")
             self.expand.setEnabled(False)
             self.sync_review()
-            self.preview_pending = (key, item, record.get("output"), bbox)
+            self.preview_pending = (
+                key,
+                item,
+                record.get("base_output") or record.get("output"),
+                bbox,
+            )
             self.load_preview()
+            if self.edit_on_selection and record.get("output"):
+                self.review.editor.pending_tool = "resume"
+
+    def request_native_detail(self):
+        if self.compare.before is None or self.compare.high_detail:
+            return
+        if self.close_requested:
+            return
+        if self.detail_loader and self.detail_loader.isRunning():
+            self.detail_pending = True
+            return
+        index = self.table.currentIndex().row()
+        if not 0 <= index < len(self.queue.items):
+            return
+        record = self.queue.results.get(index, {})
+        item = self.queue.items[index]
+        editor = self.review.editor
+        if editor.active and not editor.flush_state():
+            return
+        self.detail_pending = False
+        self.detail_loader = PreviewWorker(
+            self.preview_key,
+            item,
+            record.get("base_output") or record.get("output"),
+            self.face_choice.currentData(),
+            workspace=self.workspace,
+            full=True,
+        )
+        self.detail_loader.loaded.connect(self.native_detail_loaded)
+        self.detail_loader.finished.connect(self.native_detail_finished)
+        self.detail_loader.start()
+
+    def native_detail_loaded(self, key, before, after, error):
+        if key != self.preview_key or self.close_requested:
+            return
+        if error:
+            self.preview_detail.setText("Полный размер: " + error)
+            return
+        # Full-resolution pixels are only kept for the current canvas, not in LRU.
+        for name, data in (("before", before), ("after", after)):
+            pixmap = QPixmap()
+            if data:
+                pixmap.loadFromData(data, "PNG")
+            setattr(self.compare, name, pixmap if not pixmap.isNull() else None)
+        self.compare.high_detail = True
+        self.compare.update()
+        if self.review.editor.active:
+            # A user may have changed parameters while full-size decoding ran.
+            self.review.editor.render_preview()
+
+    def native_detail_finished(self):
+        if self.close_requested:
+            self.close()
+        elif self.detail_pending:
+            self.request_native_detail()
 
     def reset_preview(self):
         self.preview_key = self.preview_pending = None
@@ -1317,7 +1649,9 @@ class Window(QMainWindow):
             return
         if self.preview_pending is None or self.close_requested:
             return
-        self.preview_loader = PreviewWorker(*self.preview_pending)
+        self.preview_loader = PreviewWorker(
+            *self.preview_pending, workspace=self.workspace
+        )
         self.preview_pending = None
         self.preview_loader.loaded.connect(self.preview_loaded)
         self.preview_loader.finished.connect(self.preview_finished)
@@ -1329,12 +1663,23 @@ class Window(QMainWindow):
             self.close()
         else:
             self.load_preview()
+            editor = self.review.editor
+            if (
+                not editor.active
+                and editor.pending_tool
+                and self.preview_pending is None
+            ):
+                tool, editor.pending_tool = editor.pending_tool, None
+                editor.begin(tool)
 
     def preview_loaded(self, key, before, after, error):
         if key != self.preview_key:
             return
         if before:
             self.show_preview(before, after)
+            if self.preview_loader and self.preview_loader.native_size:
+                self.preview_sizes[key] = self.preview_loader.native_size
+                self.compare.native_size = self.preview_loader.native_size
             if not error:
                 self.cache_preview(key, (before, after))
         else:
@@ -1350,6 +1695,10 @@ class Window(QMainWindow):
         record = dict(self.queue.results.get(index, {}))
         record.update(changes)
         self.queue.update(index, record)
+        self.persist_queue()
+        if record.get("output"):
+            self.output_folder = str(Path(record["output"]).parent)
+            self.open_folder.setEnabled(True)
         if self.last_report is not None:
             for record in self.last_report["records"]:
                 if record["index"] == index:
@@ -1374,10 +1723,13 @@ class Window(QMainWindow):
     def cache_preview(self, key, pair):
         self.previews[key] = pair
         while len(self.previews) > 8:
-            self.previews.pop(next(iter(self.previews)))
+            oldest = next(iter(self.previews))
+            self.previews.pop(oldest)
+            self.preview_sizes.pop(oldest, None)
 
     def show_preview(self, before, after):
         self.compare.show_pair(before, after)
+        self.compare.native_size = self.preview_sizes.get(self.preview_key)
         self.expand.setEnabled(True)
         self.sync_review()
 
@@ -1386,8 +1738,17 @@ class Window(QMainWindow):
             self.review.sync_controls()
 
     def select_photo(self, index):
-        if self.review.editor.active:
+        if not 0 <= index < len(self.queue.items):
             return
+        if self.review.editor.active:
+            if index != self.review.editor.index:
+                self.requested_photo = index
+                self.review.editor.leave(lambda: self.select_photo(index))
+            else:
+                self.requested_photo = None
+                self.review.editor.departure = None
+            return
+        self.requested_photo = None
         if 0 <= index < len(self.queue.items):
             selected = self.table.selectionModel().selectedRows()
             if not selected or selected[0].row() != index:
@@ -1399,7 +1760,10 @@ class Window(QMainWindow):
 
     def select_relative(self, delta):
         selected = self.table.selectionModel().selectedRows()
-        self.select_photo((selected[0].row() if selected else -1) + delta)
+        current = self.requested_photo
+        if current is None:
+            current = selected[0].row() if selected else -1
+        self.select_photo(current + delta)
 
     def open_comparison(self, *args):
         self.show_page(self.COMPARE)
@@ -1417,13 +1781,20 @@ class Window(QMainWindow):
             self.showFullScreen()
 
     def leave_review_fullscreen(self):
-        self.navigation.setVisible(not self.review.editor.active)
+        self.navigation.show()
         self.chrome.show()
         self.showMaximized() if self.review_was_maximized else self.showNormal()
         self.refresh_shortcut_hints()
 
     def refresh_shortcut_hints(self):
         self.review.editor.refresh_shortcut_hints(self.shortcuts)
+        for action, control in self.review.tool_buttons.items():
+            control.setToolTip(
+                control.property("caption") + " · " + self.shortcuts.hint(action)
+            )
+        self.review.compare_toggle.setToolTip(
+            "Исходное / результат · " + self.shortcuts.hint("original")
+        )
         self.review.fullscreen.setText(
             "Вернуться" if self.isFullScreen() else "На весь экран"
         )
@@ -1462,8 +1833,14 @@ class Window(QMainWindow):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def open_results(self):
-        if self.output_folder:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(self.output_folder))
+        record = self.queue.results.get(self.table.currentIndex().row(), {})
+        folder = (
+            str(Path(record["output"]).parent)
+            if record.get("output")
+            else self.output_folder
+        )
+        if folder:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def error(self, message):
         QMessageBox.warning(self, "ColorPro", message)
@@ -1479,24 +1856,14 @@ class Window(QMainWindow):
             event.acceptProposedAction()
 
     def closeEvent(self, event):
+        if self.restorer and self.restorer.isRunning():
+            self.close_requested = True
+            event.ignore()
+            return
         if self.review.editor.active:
-            if self.review.editor.running():
-                self.review.editor.status.setText(
-                    "Дождитесь завершения текущей операции."
-                )
-                event.ignore()
-                return
-            answer = QMessageBox.question(
-                self,
-                "Закрыть коррекцию?",
-                "Закрыть без сохранения ручных изменений?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                event.ignore()
-                return
-            self.review.editor.end()
+            event.ignore()
+            self.review.editor.leave(lambda: QTimer.singleShot(0, self.close))
+            return
         if self.review.editor.preview_running():
             self.close_requested = True
             event.ignore()
@@ -1524,6 +1891,11 @@ class Window(QMainWindow):
                     self.importer.requestInterruption()
             event.ignore()
         else:
+            if self.detail_loader and self.detail_loader.isRunning():
+                self.close_requested = True
+                self.detail_loader.requestInterruption()
+                event.ignore()
+                return
             if self.thumbnail_worker and self.thumbnail_worker.isRunning():
                 self.close_requested = True
                 self.thumbnail_worker.requestInterruption()
@@ -1538,6 +1910,9 @@ class Window(QMainWindow):
             if self.isFullScreen():
                 self.leave_review_fullscreen()
             self.settings.setValue("geometry", self.saveGeometry())
+            if not self.persist_queue():
+                event.ignore()
+                return
             event.accept()
 
 

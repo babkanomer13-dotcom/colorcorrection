@@ -33,9 +33,12 @@ def face_region(shape, bbox):
 class PreviewWorker(QThread):
     loaded = Signal(object, object, object, str)
 
-    def __init__(self, key, item, output, bbox=None):
+    def __init__(self, key, item, output, bbox=None, workspace=None, full=False):
         super().__init__()
         self.key, self.item, self.output, self.bbox = key, item, output, bbox
+        self.workspace = workspace
+        self.native_size = None
+        self.full = full
 
     def run(self):
         before = after = None
@@ -44,20 +47,42 @@ class PreviewWorker(QThread):
             pixels, _, _ = read_image(self.item)
             shape = pixels.shape
             region = face_region(shape, self.bbox) if self.bbox else None
+            self.native_size = (
+                (region[2] - region[0], region[3] - region[1])
+                if region
+                else (shape[1], shape[0])
+            )
             if region:
                 x0, y0, x1, y1 = region
-                before = preview_bytes(pixels[y0:y1, x0:x1])
+                before = preview_bytes(
+                    pixels[y0:y1, x0:x1], None if self.full else 1500
+                )
             else:
-                before = preview_bytes(pixels)
+                before = preview_bytes(pixels, None if self.full else 1500)
             del pixels
             if self.output and not self.isInterruptionRequested():
                 items, errors = collect_inputs([Path(self.output)])
                 if errors:
                     raise ValueError(errors[0])
-                pixels, _, _ = read_image(items[0])
+                pixels, _, base_sha = read_image(items[0])
+                if self.workspace is not None:
+                    saved = self.workspace.load_edit(self.item, self.output, base_sha)
+                    if saved:
+                        from colorcorrection.levels_operator import apply_rgb_lut
+                        from colorpro.manual_tone import combined_lut
+                        from colorpro.manual_hsl import apply_hsl
+
+                        levels, tone, hsl, balance = saved["current"]
+                        pixels = apply_hsl(
+                            apply_rgb_lut(pixels, combined_lut(levels, tone, balance)),
+                            hsl,
+                        )
                 if pixels.shape != shape:
                     raise ValueError("Размер результата отличается от исходника")
-                after = preview_bytes(pixels[y0:y1, x0:x1] if region else pixels)
+                after = preview_bytes(
+                    pixels[y0:y1, x0:x1] if region else pixels,
+                    None if self.full else 1500,
+                )
         except Exception as exc:
             error = str(exc)
         if not self.isInterruptionRequested():
@@ -70,6 +95,7 @@ class CompareView(QWidget):
     zoom_changed = Signal(float)
     expand_requested = Signal()
     pixel_picked = Signal(float, float)
+    native_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -80,6 +106,9 @@ class CompareView(QWidget):
         self.center = QPointF(0.5, 0.5)
         self.drag_start = None
         self.picking = False
+        self.original_visible = False
+        self.native_size = None
+        self.high_detail = False
         self.message = "Выберите фотографию в очереди"
         self.setMinimumSize(200, 145)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -93,6 +122,9 @@ class CompareView(QWidget):
     def show_pair(self, before, after):
         pixmaps = []
         for data in (before, after):
+            if isinstance(data, QPixmap):
+                pixmaps.append(data)
+                continue
             pixmap = QPixmap()
             if data:
                 pixmap.loadFromData(data, "PNG")
@@ -101,17 +133,23 @@ class CompareView(QWidget):
 
     def set_pixmaps(self, before, after):
         self.before, self.after = before, after
+        self.high_detail = False
         self.reset_zoom()
 
     def clear(self, message="Выберите фотографию в очереди"):
         self.before = self.after = None
+        self.native_size = None
+        self.high_detail = False
         self.message = message
         self.reset_zoom()
 
     def set_mode(self, mode):
         self.mode = mode
-        self.reset_zoom()
-        self.setCursor(Qt.CursorShape.OpenHandCursor if not mode else Qt.CursorShape.SplitHCursor)
+        self.clamp_center()
+        self.update()
+        self.setCursor(
+            Qt.CursorShape.SplitHCursor if mode == 1 else Qt.CursorShape.OpenHandCursor
+        )
 
     def reset_zoom(self):
         self.zoom = 1.0
@@ -120,10 +158,17 @@ class CompareView(QWidget):
         self.update()
 
     def set_zoom(self, value):
-        self.zoom = max(1.0, min(8.0, value))
+        self.zoom = max(0.1, min(32.0, float(value)))
         self.clamp_center()
         self.zoom_changed.emit(self.zoom)
         self.update()
+        if (
+            not self.high_detail
+            and self.before is not None
+            and self.native_size
+            and self.drawn_size()[0] > self.before.width() * 1.05
+        ):
+            self.native_requested.emit()
 
     def panes(self):
         if self.mode:
@@ -134,12 +179,31 @@ class CompareView(QWidget):
             QRectF(half + 20, 34, half, max(1, self.height() - 34)),
         ]
 
+    def toggle_original(self):
+        self.original_visible = not self.original_visible
+        self.update()
+
+    def actual_size(self):
+        if self.before is None:
+            return
+        pane = self.panes()[0]
+        width, height = self.native_size or (self.before.width(), self.before.height())
+        fit = min(pane.width() / width, pane.height() / height)
+        self.set_zoom(1 / max(fit, 0.001))
+        if not self.high_detail:
+            self.native_requested.emit()
+
     def drawn_size(self):
         pane = self.panes()[0]
         if self.before is None:
             return 1.0, 1.0
-        scale = min(pane.width() / self.before.width(), pane.height() / self.before.height())
-        return self.before.width() * scale * self.zoom, self.before.height() * scale * self.zoom
+        scale = min(
+            pane.width() / self.before.width(), pane.height() / self.before.height()
+        )
+        return (
+            self.before.width() * scale * self.zoom,
+            self.before.height() * scale * self.zoom,
+        )
 
     def clamp_center(self):
         pane = self.panes()[0]
@@ -167,13 +231,26 @@ class CompareView(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#f6f6fd"))
+        painter.fillRect(self.rect(), QColor("#ffffff"))
         panes = self.panes()
-        captions = ["Исходное", "Результат"]
-        for index in range(2):
-            header = QRectF(index * self.width() / 2, 0, self.width() / 2, 34)
+        captions = (
+            ["Исходное", "Исходное · Enter: результат"]
+            if self.original_visible
+            else ["Исходное", "Результат · Enter: исходное"]
+        )
+        for index in range(1 if self.mode == 2 else 2):
+            header = QRectF(
+                index * self.width() / 2,
+                0,
+                self.width() if self.mode == 2 else self.width() / 2,
+                34,
+            )
             painter.setPen(QColor("#575975"))
-            painter.drawText(header, Qt.AlignmentFlag.AlignCenter, captions[index])
+            painter.drawText(
+                header,
+                Qt.AlignmentFlag.AlignCenter,
+                captions[1] if self.mode == 2 else captions[index],
+            )
         if self.before is None:
             painter.setPen(QColor("#737373"))
             painter.drawText(
@@ -183,14 +260,20 @@ class CompareView(QWidget):
             )
             return
         for index, pane in enumerate(panes):
-            pixmap = self.before if not index else self.after
+            pixmap = self.before if not index or self.original_visible else self.after
+            if self.mode == 2:
+                pixmap = (
+                    self.before if self.original_visible else self.after or self.before
+                )
             painter.save()
             clip = QPainterPath()
             clip.addRoundedRect(pane, 10, 10)
             painter.setClipPath(clip)
             painter.fillRect(pane, QColor("#292929"))
             if pixmap is not None:
-                painter.drawPixmap(self.target_rect(pane), pixmap, QRectF(pixmap.rect()))
+                painter.drawPixmap(
+                    self.target_rect(pane), pixmap, QRectF(pixmap.rect())
+                )
             else:
                 painter.setPen(QColor("#c8c8c8"))
                 painter.drawText(
@@ -199,7 +282,7 @@ class CompareView(QWidget):
                     "Результат появится\nпосле обработки",
                 )
             painter.restore()
-        if self.mode and self.after is not None:
+        if self.mode == 1 and self.after is not None and not self.original_visible:
             pane = panes[0]
             divider = int(self.width() * self.position)
             painter.save()
@@ -210,7 +293,9 @@ class CompareView(QWidget):
                 QRectF(divider, pane.top(), self.width() - divider, pane.height()),
                 Qt.ClipOperation.IntersectClip,
             )
-            painter.drawPixmap(self.target_rect(pane), self.after, QRectF(self.after.rect()))
+            painter.drawPixmap(
+                self.target_rect(pane), self.after, QRectF(self.after.rect())
+            )
             painter.restore()
             painter.setPen(QPen(QColor("#737373"), 2))
             painter.drawLine(divider, 34, divider, self.height())
@@ -224,7 +309,8 @@ class CompareView(QWidget):
                 if (
                     pane.contains(point)
                     and target.contains(point)
-                    and (not self.mode or point.x() >= self.width() * self.position)
+                    and not self.original_visible
+                    and (self.mode != 1 or point.x() >= self.width() * self.position)
                 ):
                     self.pixel_picked.emit(
                         (point.x() - target.left()) / target.width(),
@@ -234,14 +320,14 @@ class CompareView(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus()
             self.drag_start = event.position()
-            if self.mode:
+            if self.mode == 1:
                 self.position = max(0, min(1, event.position().x() / self.width()))
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             self.update()
 
     def mouseMoveEvent(self, event):
         if self.drag_start is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            if self.mode:
+            if self.mode == 1:
                 self.position = max(0, min(1, event.position().x() / self.width()))
             else:
                 delta = event.position() - self.drag_start
@@ -254,7 +340,9 @@ class CompareView(QWidget):
     def mouseReleaseEvent(self, event):
         self.drag_start = None
         self.setCursor(
-            Qt.CursorShape.OpenHandCursor if not self.mode else Qt.CursorShape.SplitHCursor
+            Qt.CursorShape.OpenHandCursor
+            if not self.mode
+            else Qt.CursorShape.SplitHCursor
         )
 
     def mouseDoubleClickEvent(self, event):
@@ -262,7 +350,23 @@ class CompareView(QWidget):
 
     def wheelEvent(self, event):
         if self.before is not None:
+            # Qt5 wheel events have position()/posF(), but no localPos().
+            position = getattr(event, "position", None)
+            point = position() if position else event.posF()
+            pane = next((p for p in self.panes() if p.contains(point)), self.panes()[0])
+            width, height = self.drawn_size()
+            anchor = self.center + QPointF(
+                (point.x() - pane.center().x()) / width,
+                (point.y() - pane.center().y()) / height,
+            )
             self.set_zoom(self.zoom * (1.2 if event.angleDelta().y() > 0 else 1 / 1.2))
+            width, height = self.drawn_size()
+            self.center = anchor - QPointF(
+                (point.x() - pane.center().x()) / width,
+                (point.y() - pane.center().y()) / height,
+            )
+            self.clamp_center()
+            self.update()
             event.accept()
 
     def keyPressEvent(self, event):
@@ -320,7 +424,9 @@ class ComparePage(QWidget):
         )
         self.photos.setModel(owner.queue)
         self.photos.setModelColumn(1)
-        self.photos.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.photos.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self.photos.activated.connect(owner.select_photo)
         selection.addWidget(self.photos, 1)
         self.next = QPushButton()
@@ -342,40 +448,99 @@ class ComparePage(QWidget):
         self.faces.currentIndexChanged.connect(owner.selection_changed)
         selection.addWidget(self.faces)
         self.mode = combo_box()
-        self.mode.addItems(["Рядом", "Разделитель"])
+        self.mode.addItems(["Рядом", "Разделитель", "Один холст"])
         self.mode.setAccessibleName("Режим сравнения")
         selection.addWidget(self.mode)
         layout.addLayout(selection)
+        self.tools = QHBoxLayout()
+        self.tools.setSpacing(6)
+        self.tool_buttons = {}
+        for action, caption, glyph in (
+            ("edit", "Уровни", "levels"),
+            ("tone", "Яркость / контраст", "tone"),
+            ("hsl", "Тон / насыщенность", "hsl"),
+            ("balance", "Цветовой баланс", "balance"),
+            ("auto_color", "Автоцвет", "hsl"),
+            ("auto_tone", "Автотон", "tone"),
+            ("auto_contrast", "Автоконтраст", "levels"),
+        ):
+            control = QPushButton("А" if action.startswith("auto_") else "")
+            control.setIcon(navigation_icon(glyph, "#766581"))
+            control.setIconSize(QSize(22, 22))
+            control.setFixedSize(42 if action.startswith("auto_") else 36, 36)
+            control.setObjectName("editorTool")
+            control.setCheckable(not action.startswith("auto_"))
+            control.setAccessibleName(caption)
+            control.setProperty("caption", caption)
+            control.clicked.connect(
+                lambda checked=False, a=action: owner.shortcuts.dispatch(a)
+            )
+            self.tools.addWidget(control)
+            self.tool_buttons[action] = control
+        self.tools.addStretch()
+        self.compare_toggle = QPushButton("До / после")
+        self.compare_toggle.setCheckable(True)
+        self.compare_toggle.clicked.connect(lambda: self.view.toggle_original())
+        self.tools.addWidget(self.compare_toggle)
+        layout.addLayout(self.tools)
         self.view = CompareView()
+        self.view.native_requested.connect(owner.request_native_detail)
+        self.mode.setCurrentIndex(2)
+        self.view.set_mode(2)
         self.mode.currentIndexChanged.connect(self.view.set_mode)
         self.view.setAccessibleName("До и после, одинаковый масштаб")
         self.view.expand_requested.connect(owner.toggle_review_fullscreen)
         self.zoom_label = QLabel("1.0×")
-        self.view.zoom_changed.connect(lambda value: self.zoom_label.setText(f"{value:.1f}×"))
+        self.view.zoom_changed.connect(
+            lambda value: self.zoom_label.setText(f"{value:.1f}×")
+        )
         workspace = QHBoxLayout()
         workspace.addWidget(self.view, 1)
         self.editor = LevelsPanel(owner)
         self.view.pixel_picked.connect(self.editor.picked)
         workspace.addWidget(self.editor)
         from colorpro.filmstrip import Filmstrip
+
         self.filmstrip = Filmstrip(owner)
-        workspace.addWidget(self.filmstrip)
+        workspace.insertWidget(0, self.filmstrip)
+        for button in (self.editor.undo_button, self.editor.redo_button):
+            self.tools.insertWidget(7, button)
+        self.editor.auto.hide()
+        self.editor.auto_mode.hide()
+        self.editor.cancel.hide()
+        self.levels_button.hide()  # Toolbar is the single visible tool entry point.
         layout.addLayout(workspace, 1)
         self.detail = QLabel("")
         self.detail.setObjectName("muted")
         self.detail.setTextFormat(Qt.TextFormat.PlainText)
         self.detail.setWordWrap(True)
         self.detail.setMaximumHeight(40)
-        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.detail.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self.detail.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         toolbar = QHBoxLayout()
         toolbar.addWidget(self.detail, 1)
         toolbar.addWidget(self.zoom_label)
+        self.rail_toggle = QPushButton("Лента")
+        self.panel_toggle = QPushButton("Параметры")
+        for widget, key, callback in (
+            (self.rail_toggle, "filmstrip_visible", self.toggle_filmstrip),
+            (self.panel_toggle, "parameters_visible", self.toggle_parameters),
+        ):
+            widget.setCheckable(True)
+            widget.setChecked(str(owner.settings.value(key, "true")).lower() == "true")
+            widget.clicked.connect(callback)
+            toolbar.addWidget(widget)
+        self.filmstrip.setVisible(self.rail_toggle.isChecked())
         self.zoom_controls = []
         for title, callback in (
             ("−", lambda: self.view.set_zoom(self.view.zoom / 1.2)),
             ("+", lambda: self.view.set_zoom(self.view.zoom * 1.2)),
             ("По размеру", self.view.reset_zoom),
+            ("100%", self.view.actual_size),
         ):
             control = QPushButton(title)
             if title in ("−", "+"):
@@ -391,6 +556,23 @@ class ComparePage(QWidget):
         layout.addLayout(toolbar)
         for control in self.findChildren(QPushButton):
             control.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def toggle_filmstrip(self):
+        self.filmstrip.setVisible(self.rail_toggle.isChecked())
+        self.owner.settings.setValue("filmstrip_visible", self.rail_toggle.isChecked())
+
+    def toggle_parameters(self):
+        self.owner.settings.setValue(
+            "parameters_visible", self.panel_toggle.isChecked()
+        )
+        if self.panel_toggle.isChecked() and not self.editor.active:
+            self.editor.begin()
+        self.editor.setVisible(self.panel_toggle.isChecked() and self.editor.active)
+
+    def highlight_tool(self, name):
+        for action, button in self.tool_buttons.items():
+            if button.isCheckable():
+                button.setChecked(action == ("edit" if name == "levels" else name))
 
     def sync_controls(self):
         owner = self.owner
@@ -411,17 +593,22 @@ class ComparePage(QWidget):
         for control in self.zoom_controls:
             control.setEnabled(self.view.before is not None)
         editing = self.editor.active
-        self.filmstrip.view.setEnabled(not editing)
+        self.filmstrip.view.setEnabled(True)
         loading = bool(owner.preview_loader and owner.preview_loader.isRunning())
         output = owner.queue.results.get(index, {}).get("output")
         self.levels_button.setEnabled(bool(output) and not owner.busy() and not loading)
+        for control in self.tool_buttons.values():
+            control.setEnabled(
+                (
+                    editing
+                    and self.editor.session is not None
+                    and not self.editor.running()
+                )
+                or self.levels_button.isEnabled()
+            )
         if editing:
             for control in (
-                self.previous,
-                self.next,
-                self.photos,
                 self.faces,
-                self.attention,
                 self.open_file,
             ):
                 control.setEnabled(False)

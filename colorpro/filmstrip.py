@@ -109,11 +109,13 @@ class Filmstrip(QWidget):
         self.view.setModel(self.model)
         self.view.setItemDelegate(PhotoTile(self.view))
         self.view.setUniformItemSizes(True)
+        self.view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setStyleSheet("QListView { background: white; border:0; outline:0; }")
         self.syncing = False
         self.view.selectionModel().currentChanged.connect(self.activated)
+        self.view.selectionModel().selectionChanged.connect(self.selection_changed)
         layout.addWidget(self.view, 1)
         self.timer = QTimer(self)
         self.timer.setInterval(160)
@@ -133,6 +135,13 @@ class Filmstrip(QWidget):
     def activated(self, index, previous):
         if index.isValid() and not self.syncing:
             self.owner.select_photo(index.row())
+
+    def selection_changed(self, *args):
+        if not self.syncing:
+            rows = self.view.selectionModel().selectedRows()
+            self.owner.queue.checked = {
+                self.owner.queue.items[i.row()].key for i in rows
+            }
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

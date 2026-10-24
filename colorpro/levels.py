@@ -108,6 +108,16 @@ class LevelsSession:
         image.close()
         self.format = "JPEG" if self.path.suffix.lower() in {".jpg", ".jpeg"} else "PNG"
 
+    def render(self, snapshot):
+        from colorcorrection.levels_operator import apply_rgb_lut
+        from colorpro.manual_tone import combined_lut
+        from colorpro.manual_hsl import apply_hsl
+
+        levels, tone, hsl, balance = snapshot
+        return apply_hsl(
+            apply_rgb_lut(self.pixels, combined_lut(levels, tone, balance)), hsl
+        )
+
     def save(self, settings, tone=None, hsl=None, balance=None):
         from colorcorrection.classic_face_inference import pixel_hash
         from colorcorrection.levels_operator import apply_rgb_lut

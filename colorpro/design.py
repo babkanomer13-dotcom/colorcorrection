@@ -100,6 +100,9 @@ QCheckBox { spacing: 10px; background: transparent; }
 QPushButton#adjustmentToggle { text-align: left; font-weight: 600; padding: 9px 10px; color: #4d425c; background: #f5f1f8; border: 1px solid #ebe4ee; }
 QPushButton#adjustmentToggle:checked { color: #a71971; background: #fceff7; border-color: #efd3e4; }
 QPushButton#historyButton { padding: 4px; min-width: 0; }
+QPushButton#editorTool { padding: 4px; min-width: 0; border-radius: 8px; background: white; }
+QPushButton#editorTool:checked { background: #fce5f4; border-color: #d42c95; }
+QPushButton#editorTool:hover { background: #fceff7; }
 QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #dfe1f1;
  border-radius: 5px; padding: 4px; min-height: 22px; }
 QSlider::groove:horizontal { height: 5px; background: #dedde8; border-radius: 2px; }
@@ -204,6 +207,9 @@ class ProfileButton(QPushButton):
         p.setFont(font)
         initials = "".join(word[0] for word in self.name.split()[:2]).upper()
         p.drawText(QRectF(10, 0, 38, self.height()), Qt.AlignmentFlag.AlignCenter, initials)
+        if self.width() < 100:
+            p.end()
+            return
         font.setPixelSize(13)
         p.setFont(font)
         name = p.fontMetrics().elidedText(self.name, Qt.TextElideMode.ElideRight, self.width() - 66)

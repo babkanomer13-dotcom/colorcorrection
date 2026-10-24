@@ -27,6 +27,8 @@ APP = [
     "shortcuts.py",
     "shortcut_panel.py",
     "files.py",
+    "workspace.py",
+    "exporting.py",
     "batch.py",
     "preview.py",
     "ui.py",

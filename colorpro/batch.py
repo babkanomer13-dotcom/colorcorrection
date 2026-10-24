@@ -34,12 +34,23 @@ class Control:
 def write_json(path, data):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
+        json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
     )
     tmp.replace(path)
 
 
-def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=None):
+def run_batch(
+    items,
+    parent,
+    model,
+    device,
+    fmt,
+    control,
+    emit,
+    engine_factory=None,
+    export_policy=None,
+):
     if not items:
         raise ValueError("Сначала добавьте фотографии")
     if fmt not in {"PNG", "JPEG"}:
@@ -50,7 +61,10 @@ def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=N
         engine_factory = Engine
     parent = validate_output_parent(parent)
     parent.mkdir(parents=True, exist_ok=True)
-    folder = parent / f"ColorPro_{datetime.now():%Y%m%d_%H%M%S}_{model}_{uuid.uuid4().hex[:6]}"
+    folder = (
+        parent
+        / f"ColorPro_{datetime.now():%Y%m%d_%H%M%S}_{model}_{uuid.uuid4().hex[:6]}"
+    )
     folder.mkdir(exist_ok=False)
     report = dict(
         version=__version__,
@@ -104,14 +118,31 @@ def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=N
                 if report["device"] != engine.device_name:
                     report["device"] = engine.device_name
                     emit(dict(type="ready", device=engine.device_name))
-                result = output_path(folder, item, fmt)
-                save_result(result, pixels, metadata, fmt)
+                result = output_path(folder, item, "PNG" if export_policy else fmt)
+                save_result(result, pixels, metadata, "PNG" if export_policy else fmt)
                 record.update(
                     stats,
                     output=str(result),
                     source_sha256=source_sha,
                     seconds=round(time.monotonic() - step, 3),
                 )
+                if export_policy:
+                    from colorpro.exporting import export_photo
+                    from colorpro.workspace import Workspace
+
+                    record["base_output"] = str(result)
+                    record.update(
+                        export_photo(
+                            item,
+                            pixels,
+                            metadata,
+                            fmt,
+                            export_policy["mode"],
+                            export_policy["custom"],
+                            export_policy["protected"],
+                            registry=Workspace(export_policy["workspace"]),
+                        )
+                    )
                 # UI receives bounded previews; no full-batch decoded images remain in RAM.
                 emit(
                     dict(
@@ -124,18 +155,25 @@ def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=N
                 del source, pixels
             except Exception as error:
                 record.update(
-                    status="error", reason=str(error), seconds=round(time.monotonic() - step, 3)
+                    status="error",
+                    reason=str(error),
+                    seconds=round(time.monotonic() - step, 3),
                 )
                 if (
                     isinstance(error, (MemoryError, OSError))
                     and (
-                        isinstance(error, MemoryError) or getattr(error, "errno", None) in {28, 112}
+                        isinstance(error, MemoryError)
+                        or getattr(error, "errno", None) in {28, 112}
                     )
                     or "out of memory" in str(error).lower()
                 ):
                     fatal = "Недостаточно памяти или места на диске. Остаток очереди не обработан."
                     control.cancel()
             report["records"].append(record)
+            if export_policy and export_policy.get("workspace"):
+                from colorpro.workspace import Workspace
+
+                Workspace(export_policy["workspace"]).save_processed(item, record)
             report["elapsed_seconds"] = round(time.monotonic() - started, 3)
             write_json(folder / "report.json", report)
             emit(
@@ -153,12 +191,20 @@ def run_batch(items, parent, model, device, fmt, control, emit, engine_factory=N
     finally:
         try:
             if engine is not None:
-                emit(dict(type="stage", text="Освобождение ресурсов и сохранение отчёта…"))
+                emit(
+                    dict(
+                        type="stage", text="Освобождение ресурсов и сохранение отчёта…"
+                    )
+                )
                 engine.close()
         except Exception as error:
             fatal = f"Ошибка завершения обработчика: {error}"
         report.update(
-            state="failed" if fatal else "cancelled" if control.stop.is_set() else "completed",
+            state="failed"
+            if fatal
+            else "cancelled"
+            if control.stop.is_set()
+            else "completed",
             error=fatal,
             elapsed_seconds=round(time.monotonic() - started, 3),
         )

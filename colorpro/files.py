@@ -23,7 +23,15 @@ from colorpro.safety import validate_output_parent
 
 RAW_EXTENSIONS = set()
 
-EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"} | RAW_EXTENSIONS
+EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".tif",
+    ".tiff",
+    ".bmp",
+} | RAW_EXTENSIONS
 MAX_FILE = 256 * 1024 * 1024
 MAX_PIXELS = 80_000_000
 MAX_ITEMS = 10_000
@@ -55,7 +63,9 @@ class InputItem:
     def unchanged(self):
         info = Path(self.path).stat()
         if info.st_size != self.size or info.st_mtime_ns != self.mtime_ns:
-            raise ValueError("Исходник изменился после добавления. Добавьте его заново.")
+            raise ValueError(
+                "Исходник изменился после добавления. Добавьте его заново."
+            )
 
 
 def safe_member(info):
@@ -76,13 +86,45 @@ def safe_member(info):
         raise ValueError("Превышен безопасный размер или коэффициент сжатия ZIP")
 
 
-def collect_inputs(paths, existing=(), cancelled=lambda: False):
+def expanded_inputs(paths, cancelled):
+    for value in paths:
+        path = Path(value)
+        if not path.is_dir():
+            yield path
+            continue
+        # A folder import never recursively ingests the application's exports.
+        if path.name.casefold() == "colorpro":
+            continue
+        for directory, folders, files in os.walk(path, followlinks=False):
+            if cancelled():
+                return
+            folders[:] = sorted(
+                name
+                for name in folders
+                if name.casefold() != "colorpro"
+                and not name.startswith(".")
+                and not Path(directory, name).is_symlink()
+                and not (
+                    Path(directory, name).stat().st_file_attributes & 1024
+                    if os.name == "nt"
+                    else False
+                )
+            )
+            for name in sorted(files):
+                if Path(name).suffix.lower() in EXTENSIONS | {".zip"}:
+                    yield Path(directory) / name
+
+
+def collect_inputs(paths, existing=(), cancelled=lambda: False, excluded=()):
     items, errors = [], []
     seen = {item.key for item in existing}
-    for value in paths:
+    excluded = {Path(path).resolve() for path in excluded}
+    for value in expanded_inputs(paths, cancelled):
         if cancelled():
             break
         path = Path(value).resolve()
+        if path in excluded:
+            continue
         try:
             if not path.is_file():
                 raise ValueError("Выберите файл, а не папку")
@@ -90,15 +132,21 @@ def collect_inputs(paths, existing=(), cancelled=lambda: False):
             if path.suffix.lower() == ".zip":
                 with zipfile.ZipFile(path) as archive:
                     entries = archive.infolist()
-                    if len(entries) > MAX_ITEMS or sum(i.file_size for i in entries) > MAX_EXPANDED:
-                        raise ValueError("Слишком большой ZIP: максимум 10 000 записей / 100 ГБ")
+                    if (
+                        len(entries) > MAX_ITEMS
+                        or sum(i.file_size for i in entries) > MAX_EXPANDED
+                    ):
+                        raise ValueError(
+                            "Слишком большой ZIP: максимум 10 000 записей / 100 ГБ"
+                        )
                     added = 0
                     for entry in entries:
                         if cancelled():
                             break
                         if (
                             entry.is_dir()
-                            or PurePosixPath(entry.filename).suffix.lower() not in EXTENSIONS
+                            or PurePosixPath(entry.filename).suffix.lower()
+                            not in EXTENSIONS
                         ):
                             continue
                         try:
@@ -114,14 +162,18 @@ def collect_inputs(paths, existing=(), cancelled=lambda: False):
                             )
                             if item.key not in seen:
                                 if len(seen) >= MAX_ITEMS:
-                                    raise ValueError("Очередь ограничена 10 000 фотографиями")
+                                    raise ValueError(
+                                        "Очередь ограничена 10 000 фотографиями"
+                                    )
                                 seen.add(item.key)
                                 items.append(item)
                                 added += 1
                         except ValueError as error:
                             errors.append(f"{path.name} / {entry.filename}: {error}")
                     if not added and not any(i.path == str(path) for i in existing):
-                        errors.append(f"{path.name}: новых поддерживаемых фотографий нет")
+                        errors.append(
+                            f"{path.name}: новых поддерживаемых фотографий нет"
+                        )
             else:
                 if path.suffix.lower() not in EXTENSIONS:
                     raise ValueError("Поддерживаются JPEG, PNG, WebP, TIFF, BMP и ZIP")
@@ -147,7 +199,12 @@ def input_stream(item):
     else:
         with zipfile.ZipFile(item.path) as archive:
             info = next(
-                (i for i in archive.infolist() if i.header_offset == item.header_offset), None
+                (
+                    i
+                    for i in archive.infolist()
+                    if i.header_offset == item.header_offset
+                ),
+                None,
             )
             if info is None or (info.filename, info.file_size, info.CRC) != (
                 item.member,
@@ -157,7 +214,9 @@ def input_stream(item):
                 raise ValueError("Состав ZIP изменился")
             safe_member(info)
             # Never extract member paths. At most one image in an auto-deleted temp file.
-            with tempfile.SpooledTemporaryFile(max_size=16 * 1024**2, mode="w+b") as temp:
+            with tempfile.SpooledTemporaryFile(
+                max_size=16 * 1024**2, mode="w+b"
+            ) as temp:
                 total = 0
                 with archive.open(info) as source:
                     while chunk := source.read(1024**2):
@@ -186,18 +245,35 @@ def read_image(item):
             container_note = None
             if image.format == "MPO":
                 image.seek(0)
-                container_note = "MPO: processed primary frame 0 only; original container unchanged"
+                container_note = (
+                    "MPO: processed primary frame 0 only; original container unchanged"
+                )
             elif getattr(image, "n_frames", 1) != 1:
-                raise ValueError("Многостраничные / анимированные изображения не поддерживаются")
+                raise ValueError(
+                    "Многостраничные / анимированные изображения не поддерживаются"
+                )
             if image.format == "TIFF" and max(image.tag_v2.get(258, (8,))) > 8:
                 raise ValueError("16-битный TIFF: сначала экспортируйте 8-битный RGB")
             if image.mode not in {"RGB", "L"}:
-                raise ValueError(f"Режим {image.mode}: нужен непрозрачный 8-битный RGB или L")
+                raise ValueError(
+                    f"Режим {image.mode}: нужен непрозрачный 8-битный RGB или L"
+                )
             icc = image.info.get("icc_profile")
             with ImageOps.exif_transpose(image) as normalized:
                 safe = Image.Exif()
                 original = normalized.getexif()
-                for tag in (271, 272, 306, 33434, 33437, 34855, 36867, 36868, 37386, 42036):
+                for tag in (
+                    271,
+                    272,
+                    306,
+                    33434,
+                    33437,
+                    34855,
+                    36867,
+                    36868,
+                    37386,
+                    42036,
+                ):
                     value = original.get(tag)
                     if isinstance(value, (int, float, str)) and len(str(value)) < 512:
                         safe[tag] = value
@@ -217,7 +293,9 @@ def read_image(item):
                 dpi = image.info.get("dpi")
                 if isinstance(dpi, tuple) and len(dpi) == 2:
                     if all(
-                        isinstance(v, (int, float)) and math.isfinite(v) and 1 <= v <= 9600
+                        isinstance(v, (int, float))
+                        and math.isfinite(v)
+                        and 1 <= v <= 9600
                         for v in dpi
                     ):
                         metadata["dpi"] = dpi
@@ -241,7 +319,10 @@ def output_path(folder, item, fmt):
     name = output_name(item, fmt)
     candidate = Path(folder) / name
     number = 1
-    while candidate.exists() or candidate.with_suffix(candidate.suffix + ".partial").exists():
+    while (
+        candidate.exists()
+        or candidate.with_suffix(candidate.suffix + ".partial").exists()
+    ):
         number += 1
         candidate = Path(folder) / str(number) / name
     candidate.parent.mkdir(parents=True, exist_ok=True)
@@ -254,7 +335,9 @@ def save_result(path, pixels, metadata, fmt):
     if path.exists():
         raise FileExistsError("Результат уже существует; перезапись запрещена")
     temp = path.with_suffix(path.suffix + ".partial")
-    options = {k: v for k, v in metadata.items() if k in {"icc_profile", "exif", "dpi"} and v}
+    options = {
+        k: v for k, v in metadata.items() if k in {"icc_profile", "exif", "dpi"} and v
+    }
     options.update(quality=100, subsampling=0) if fmt == "JPEG" else options.update(
         compress_level=3
     )
@@ -265,6 +348,10 @@ def save_result(path, pixels, metadata, fmt):
             Image.fromarray(pixels).save(stream, format=fmt, **options)
             stream.flush()
             os.fsync(stream.fileno())
+        with Image.open(temp) as check:
+            check.load()
+            if check.size != (pixels.shape[1], pixels.shape[0]):
+                raise ValueError("Не удалось проверить сохранённое изображение")
         # Windows rename refuses to replace an existing destination.
         temp.rename(path)
     finally:
@@ -272,9 +359,10 @@ def save_result(path, pixels, metadata, fmt):
             temp.unlink()
 
 
-def preview_bytes(pixels):
+def preview_bytes(pixels, max_size=1500):
     image = Image.fromarray(pixels)
-    image.thumbnail((1500, 1500))
+    if max_size is not None:
+        image.thumbnail((max_size, max_size))
     stream = io.BytesIO()
     image.save(stream, format="PNG")
     return stream.getvalue()

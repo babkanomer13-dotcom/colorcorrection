@@ -112,7 +112,48 @@ def navigation_icon(kind, tint=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(color), 1.6))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        if kind in {"previous", "next"}:
+        if kind == "levels":
+            painter.drawLine(3, 18, 19, 18)
+            for x, height in ((5, 5), (8, 11), (11, 15), (14, 8), (17, 12)):
+                painter.drawLine(x, 17, x, 18 - height)
+        elif kind == "tone":
+            painter.drawEllipse(QPointF(11, 11), 4, 4)
+            for a, b in (
+                ((11, 1), (11, 4)),
+                ((11, 18), (11, 21)),
+                ((1, 11), (4, 11)),
+                ((18, 11), (21, 11)),
+                ((3, 3), (5, 5)),
+                ((17, 17), (19, 19)),
+                ((3, 19), (5, 17)),
+                ((17, 5), (19, 3)),
+            ):
+                painter.drawLine(QPointF(*a), QPointF(*b))
+        elif kind == "hsl":
+            painter.drawEllipse(QPointF(11, 11), 8, 8)
+            for tint2, x, y in (
+                ("#d94d99", 8, 8),
+                ("#8160c9", 14, 8),
+                ("#ecad67", 11, 14),
+            ):
+                painter.setBrush(QColor(tint2))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(x, y), 3.2, 3.2)
+        elif kind == "balance":
+            painter.drawLine(11, 3, 11, 19)
+            painter.drawLine(4, 7, 18, 7)
+            painter.drawPolyline(
+                QPolygonF(
+                    [QPointF(2, 14), QPointF(5, 7), QPointF(8, 14), QPointF(2, 14)]
+                )
+            )
+            painter.drawPolyline(
+                QPolygonF(
+                    [QPointF(14, 14), QPointF(17, 7), QPointF(20, 14), QPointF(14, 14)]
+                )
+            )
+            painter.drawLine(7, 19, 15, 19)
+        elif kind in {"previous", "next"}:
             painter.setPen(QPen(QColor(tint or "#8a8eb6"), 1.8))
             x0, x1 = (13, 8) if kind == "previous" else (8, 13)
             painter.drawPolyline(
