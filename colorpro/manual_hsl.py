@@ -52,7 +52,7 @@ def load_hsl_bank():
     return saturation, lightness
 
 
-def apply_hsl(pixels, settings, *, banks=None):
+def apply_hsl(pixels, settings, *, banks=None, checkpoint=lambda: None):
     """Master channel (not Colorize/range masks). Process bounded pixel chunks."""
     validate_hsl(settings)
     if (
@@ -72,6 +72,7 @@ def apply_hsl(pixels, settings, *, banks=None):
     sat = saturation[settings["saturation"] + 100]
     light = lightness[settings["lightness"] + 100]
     for start in range(0, len(source), 131072):
+        checkpoint()
         values = light[source[start : start + 131072]].astype(np.int32)
         red, green, blue = values.T
         maximum, minimum = values.max(axis=1), values.min(axis=1)

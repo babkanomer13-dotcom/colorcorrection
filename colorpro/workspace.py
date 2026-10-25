@@ -1,7 +1,7 @@
 """Durable editor metadata, independent of exported photographs.
 
-Small atomic JSON records are committed on the GUI thread. Full-size images are
-only read/written by workers. Image identity includes the source fingerprint,
+Editor records are committed by a serialized background writer. Full-size images
+are only read/written by workers. Image identity includes the source fingerprint,
 never a mutable queue row number. No data lives solely in a temporary directory.
 """
 

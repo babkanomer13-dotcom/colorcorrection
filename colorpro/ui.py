@@ -695,6 +695,7 @@ class Window(QMainWindow):
     def restore_finished(self):
         self.set_busy(False)
         self.request_thumbnails()
+        self.resume_saved_edit()
         if self.close_requested:
             self.close()
 
@@ -990,8 +991,8 @@ class Window(QMainWindow):
             (
                 "03",
                 "Сравните и сохраните",
-                "Выберите кадр в ленте слева и инструмент сверху. Enter переключает исходник "
-                "и актуальный результат. Правки и история сохраняются автоматически; "
+                "Выберите кадр в ленте слева и инструмент сверху. Удерживайте Enter для исходника "
+                "и отпустите для результата. Правки и история сохраняются автоматически; "
                 "«Экспортировать фото» обновляет готовый файл. Исходник не меняется. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
@@ -1077,6 +1078,20 @@ class Window(QMainWindow):
             if self.queue.items and not self.table.selectionModel().selectedRows():
                 self.table.selectRow(0)
             self.sync_review()
+            self.resume_saved_edit()
+
+    def resume_saved_edit(self):
+        if self.pages.currentIndex() != self.COMPARE or self.review.editor.active:
+            return
+        index = self.table.currentIndex().row()
+        if 0 <= index < len(self.queue.items) and self.queue.results.get(index, {}).get(
+            "output"
+        ):
+            if (
+                self.edit_on_selection
+                or self.workspace.edit_path(self.queue.items[index]).is_file()
+            ):
+                self.review.editor.begin(tool="resume")
 
     def update_idle(self):
         self.update_offer.update.setEnabled(True)
@@ -1562,6 +1577,9 @@ class Window(QMainWindow):
             self.reset_preview()
             return
         item = self.queue.items[index]
+        resume_edit = self.pages.currentIndex() == self.COMPARE and (
+            self.edit_on_selection or self.workspace.edit_path(item).is_file()
+        )
         self.queue_timer.start()
         self.sync_review()
         faces = [
@@ -1595,7 +1613,7 @@ class Window(QMainWindow):
         if key in self.previews:
             before, after = self.previews[key]
             self.show_preview(before, after)
-            if self.edit_on_selection and record.get("output"):
+            if resume_edit and record.get("output"):
                 self.review.editor.begin(tool="resume")
         else:
             self.compare.clear("Загрузка исходника…")
@@ -1608,7 +1626,7 @@ class Window(QMainWindow):
                 bbox,
             )
             self.load_preview()
-            if self.edit_on_selection and record.get("output"):
+            if resume_edit and record.get("output"):
                 self.review.editor.pending_tool = "resume"
 
     def request_native_detail(self):
@@ -1624,9 +1642,6 @@ class Window(QMainWindow):
             return
         record = self.queue.results.get(index, {})
         item = self.queue.items[index]
-        editor = self.review.editor
-        if editor.active and not editor.flush_state():
-            return
         self.detail_pending = False
         self.detail_loader = PreviewWorker(
             self.preview_key,
@@ -1635,6 +1650,7 @@ class Window(QMainWindow):
             self.face_choice.currentData(),
             workspace=self.workspace,
             full=True,
+            source_only=self.review.editor.active,
         )
         self.detail_loader.loaded.connect(self.native_detail_loaded)
         self.detail_loader.finished.connect(self.native_detail_finished)
@@ -1648,9 +1664,9 @@ class Window(QMainWindow):
             return
         # Full-resolution pixels are only kept for the current canvas, not in LRU.
         for name, data in (("before", before), ("after", after)):
-            pixmap = QPixmap()
-            if data:
-                pixmap.loadFromData(data, "PNG")
+            if name == "after" and self.review.editor.active:
+                continue
+            pixmap = QPixmap.fromImage(data) if data is not None else QPixmap()
             setattr(self.compare, name, pixmap if not pixmap.isNull() else None)
         self.compare.high_detail = True
         self.compare.update()
@@ -1782,7 +1798,10 @@ class Window(QMainWindow):
                 self.review.editor.leave(lambda: self.select_photo(index))
             else:
                 self.requested_photo = None
+                returning = self.review.editor.departure is not None
                 self.review.editor.departure = None
+                if returning:
+                    self.review.editor.render_preview()
             return
         self.requested_photo = None
         if 0 <= index < len(self.queue.items):

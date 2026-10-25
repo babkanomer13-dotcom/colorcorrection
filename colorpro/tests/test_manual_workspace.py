@@ -282,7 +282,7 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
     from PySide6.QtCore import QTimer
     from PySide6.QtGui import QPixmap
 
-    import colorpro.levels_panel as panel_module
+    from colorpro.editor_render import rgb_image
     from colorpro.levels import histogram
     from colorpro.manual_hsl import apply_hsl
 
@@ -293,12 +293,12 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
     editor.active = True
     monkeypatch.setattr(editor, "flush_state", lambda: True)
     started, release = threading.Event(), threading.Event()
-    encode = panel_module.preview_bytes
+    render = editor.preview_renderer.render
 
-    def delayed(values):
+    def delayed(*args, **kwargs):
         started.set()
         assert release.wait(5)
-        return encode(values)
+        return render(*args, **kwargs)
 
     def pump(predicate):
         deadline = time.monotonic() + 8
@@ -307,7 +307,7 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
             time.sleep(0.005)
         assert predicate()
 
-    monkeypatch.setattr(panel_module, "preview_bytes", delayed)
+    monkeypatch.setattr(editor.preview_renderer, "render", delayed)
     try:
         editor.render_preview()
         pump(started.is_set)
@@ -318,10 +318,9 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
         ticks = []
         QTimer.singleShot(0, lambda: ticks.append(True))
         pump(lambda: bool(ticks))  # UI events continue while the worker is blocked.
-        expected = QPixmap()
-        expected.loadFromData(encode(apply_hsl(pixels, editor.hsl)), "PNG")
+        expected = QPixmap.fromImage(rgb_image(apply_hsl(pixels, editor.hsl)))
         if cancel:
-            editor.end()
+            editor.end(persist=False)
             owner.compare.after = QPixmap(3, 4)
             expected = owner.compare.after.copy()
         release.set()

@@ -105,7 +105,16 @@ class LevelsSession:
         image = Image.fromarray(self.pixels)
         image.thumbnail((1200, 1200))
         self.preview = np.array(image)
+        image.thumbnail((640, 640))
+        self.quick_preview = np.array(image)
         image.close()
+        # Warm verified tables during background loading, before the first drag.
+        from colorpro.manual_hsl import load_hsl_bank
+        from colorpro.manual_tone import combined_lut, load_tone_bank
+
+        load_hsl_bank()
+        load_tone_bank()
+        combined_lut(defaults(), None, None)
         self.format = "JPEG" if self.path.suffix.lower() in {".jpg", ".jpeg"} else "PNG"
 
     def render(self, snapshot):

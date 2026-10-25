@@ -49,7 +49,12 @@ def workspace(app, tmp_path):
     pump(app, lambda: not editor.running())
     if editor.active:
         editor.end()
-    pump(app, lambda: not editor.preview_running())
+    pump(
+        app,
+        lambda: (
+            not editor.active and not editor.preview_running() and editor.state_idle()
+        ),
+    )
     for worker in (owner.preview_loader, owner.thumbnail_worker):
         if worker and worker.isRunning():
             worker.requestInterruption()
@@ -217,6 +222,9 @@ def test_russian_physical_tool_shortcuts_and_recording_guard(app, workspace):
     assert editor.hsl_section.body.isVisible()
     editor.end()
     owner.show_shortcut_settings()
+    pump(
+        app, lambda: not editor.active and owner.pages.currentIndex() == owner.SETTINGS
+    )
     recorder = owner.shortcut_panel.editors["tone"]
     recorder.setFocus()
     QTest.keyClick(recorder, Qt.Key.Key_B, CTRL)
@@ -225,8 +233,9 @@ def test_russian_physical_tool_shortcuts_and_recording_guard(app, workspace):
     # A plain letter assignment must not swallow text being typed into a number.
     owner.shortcuts.apply({"hsl": "U"})
     owner.show_page(owner.COMPARE)
-    pump(app, lambda: owner.review.levels_button.isEnabled())
-    editor.begin()
+    pump(app, lambda: editor.active or owner.review.levels_button.isEnabled())
+    if not editor.active:
+        editor.begin()
     ready(app, editor)
     # Reopening now preserves expanded groups; establish a closed HSL group
     # explicitly before testing that plain typing cannot activate it.

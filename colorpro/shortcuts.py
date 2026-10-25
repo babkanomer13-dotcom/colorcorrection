@@ -40,9 +40,9 @@ ACTIONS = (
     Action("zoom_out", "Отдалить", "image", "Ctrl+-"),
     Action("fit", "Вписать фотографию в окно", "image", "Ctrl+0"),
     Action("actual_size", "Масштаб 100%", "image", "Ctrl+1"),
-    Action("original", "Исходное / актуальный результат", "image", "Return"),
+    Action("original", "Удерживать: исходное фото", "image", "Return"),
     Action("fullscreen", "Полноэкранный просмотр", "image", "F11"),
-    Action("mode", "Рядом / разделитель", "image", "Ctrl+Tab"),
+    Action("mode", "1 фото / 2 фото / разделитель", "image", "Ctrl+Tab"),
     # Keep the 1.6.0 ID so existing custom Levels bindings survive the upgrade.
     Action("edit", "Уровни", "tool", "Ctrl+L"),
     Action("hsl", "Цветовой тон / насыщенность", "tool", "Ctrl+U"),
@@ -254,7 +254,25 @@ class ShortcutManager(QObject):
         return None
 
     def eventFilter(self, watched, event):
-        if event.type() not in {QEvent.Type.KeyPress, QEvent.Type.ShortcutOverride}:
+        if event.type() in {
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.FocusOut,
+        }:
+            self.release_original()
+        if event.type() not in {
+            QEvent.Type.KeyPress,
+            QEvent.Type.KeyRelease,
+            QEvent.Type.ShortcutOverride,
+        }:
+            return False
+        key = physical_key(event)
+        if event.type() == QEvent.Type.KeyRelease:
+            if getattr(self, "held_original", None) == key:
+                if not event.isAutoRepeat():
+                    self.release_original()
+                event.accept()
+                return True
             return False
         if not isinstance(watched, QWidget) or watched.window() is not self.owner:
             return False
@@ -270,8 +288,7 @@ class ShortcutManager(QObject):
         numeric_command = (
             BY_ID[action].scope in {"tool", "value"}
             or action.startswith("channel_")
-            or action
-            in {"save", "step_back", "redo", "undo", "original", "next", "previous"}
+            or action in {"save", "step_back", "redo", "undo", "next", "previous"}
         )
         # Plain letters/digits assigned by the user must still be typeable.
         modified = bool(
@@ -298,7 +315,7 @@ class ShortcutManager(QObject):
                     }
                 )
                 or (modified and not text_command)
-                or action in {"original", "next", "previous"}
+                or action in {"next", "previous"}
                 or Qt.Key.Key_F1 <= physical_key(event) <= Qt.Key.Key_F35
             )
         ):
@@ -324,8 +341,19 @@ class ShortcutManager(QObject):
         ):
             if commit_spin is not None:
                 commit_spin.interpretText()
-            self.dispatch(action)
+            if action == "original":
+                self.held_original = key
+                self.owner.compare.set_original(True)
+                self.owner.review.compare_toggle.setChecked(True)
+            else:
+                self.dispatch(action)
         return True
+
+    def release_original(self):
+        if getattr(self, "held_original", None) is not None:
+            self.held_original = None
+            self.owner.compare.set_original(False)
+            self.owner.review.compare_toggle.setChecked(False)
 
     def dispatch(self, action):
         owner = self.owner

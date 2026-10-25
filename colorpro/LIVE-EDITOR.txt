@@ -1,0 +1,55 @@
+ColorPro 1.8.0 — live editor
+==========================
+
+Causes corrected
+----------------
+The 45 ms trailing preview timer restarted on every value change, so continuous
+dragging postponed all rendering. At native zoom it also rendered the entire
+photograph, then encoded PNG in the worker and decoded it in the GUI thread.
+Enter was a toggle with no release handling and was intercepted in numeric input.
+Atomic parameter saves performed fsync/readback in the GUI thread and were only
+scheduled when the delayed preview started. There was no async write ordering.
+
+Persistence
+-----------
+Every edit schedules parameter autosave independently of pixel completion.
+One background writer plus one newest pending snapshot bounds the queue. Immutable
+captures include source identity, base hash, all four tools, undo/redo and view.
+Only the latest matching acknowledgement marks the controls saved. Navigation and
+close wait asynchronously for the last write, including input made during a write.
+Failure keeps the editor open and retains the edits for retry. A return to the
+current frame cancels pending navigation. Atomic JSON replacement remains unchanged.
+No image is exported by autosave; explicit export still renders native resolution.
+On reopening comparison, saved tool controls and history resume automatically.
+The regular image loader already supported saved parameters; its preview work is
+now bounded and does not render a complete export merely to open a small preview.
+
+Preview and comparison
+----------------------
+One render worker with one newest request: cheap frames continue during dragging,
+in order, without accumulating outdated requests. A 640 px proxy is used for input
+feedback; 120 ms idle or slider release refines the 1200 px proxy. At native zoom
+only the visible native pixel region is refined, using the exact export operators.
+Obsolete expensive work checks cancellation between HSL chunks. QImage owns its
+RGB bytes across threads; QPixmap is created only in the GUI thread. No PNG round
+trip per edit. An unchanged LUT stage is reused for HSL-only adjustments. Verified
+tables are warmed during session loading. Proxy downsampling is for display only;
+native crop and full-size export use the unchanged CC2014 RGB8 formulas.
+
+The existing common zoom/center synchronizes both panes. Labels now explicitly
+offer 1 photo / 2 photos, with the divider retained; the mode is persisted.
+Enter shows the source on key press and the result on release, ignores repeat,
+resets on focus/window loss, and never captures Enter in text/numeric fields.
+Custom key assignments remain supported. No render, disk write or timer is
+invoked by hold comparison. RetushPro's hold/release and navigation behavior was
+used as a read-only reference; its image-saving implementation was not copied.
+
+Validation
+----------
+Tests cover continuous slider frames, exact native crop/export agreement, all
+parameter groups, blocked disk writes with latest-wins close, quick navigation,
+disk failure/retry, restart recovery, hold/repeat/keypad/custom keys/focus loss,
+input fields, synchronized geometry and persisted mode. Release receipts include
+measured 12 MP Qt5/Qt6 interaction, unchanged V39 inference, installer migration,
+offline repair and both update channels. Qt5 on a modern host is not an actual
+Windows 7 OS test. Measured latency depends on hardware and viewport size.

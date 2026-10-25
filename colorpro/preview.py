@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from colorpro.editor_render import rgb_image
 from colorpro.files import collect_inputs, preview_bytes, read_image
 from colorpro.levels_panel import LevelsPanel
 from colorpro.widgets import combo_box, navigation_icon
@@ -33,17 +34,28 @@ def face_region(shape, bbox):
 class PreviewWorker(QThread):
     loaded = Signal(object, object, object, str)
 
-    def __init__(self, key, item, output, bbox=None, workspace=None, full=False):
+    def __init__(
+        self,
+        key,
+        item,
+        output,
+        bbox=None,
+        workspace=None,
+        full=False,
+        source_only=False,
+    ):
         super().__init__()
         self.key, self.item, self.output, self.bbox = key, item, output, bbox
         self.workspace = workspace
         self.native_size = None
         self.full = full
+        self.source_only = source_only
 
     def run(self):
         before = after = None
         error = ""
         try:
+            encode = rgb_image if self.full else preview_bytes
             pixels, _, _ = read_image(self.item)
             shape = pixels.shape
             region = face_region(shape, self.bbox) if self.bbox else None
@@ -54,36 +66,48 @@ class PreviewWorker(QThread):
             )
             if region:
                 x0, y0, x1, y1 = region
-                before = preview_bytes(
-                    pixels[y0:y1, x0:x1], None if self.full else 1500
-                )
+                before = encode(pixels[y0:y1, x0:x1])
             else:
-                before = preview_bytes(pixels, None if self.full else 1500)
+                before = encode(pixels)
             del pixels
-            if self.output and not self.isInterruptionRequested():
+            if (
+                self.output
+                and not self.source_only
+                and not self.isInterruptionRequested()
+            ):
                 items, errors = collect_inputs([Path(self.output)])
                 if errors:
                     raise ValueError(errors[0])
                 pixels, _, base_sha = read_image(items[0])
+                if pixels.shape != shape:
+                    raise ValueError("Размер результата отличается от исходника")
+                if region:
+                    pixels = pixels[y0:y1, x0:x1]
+                if not self.full:
+                    # These are pointwise tools: a bounded display proxy avoids
+                    # rendering the entire export merely to open a thumbnail.
+                    import numpy as np
+                    from PIL import Image
+
+                    image = Image.fromarray(pixels)
+                    image.thumbnail((1500, 1500))
+                    pixels = np.array(image)
+                    image.close()
                 if self.workspace is not None:
                     saved = self.workspace.load_edit(self.item, self.output, base_sha)
                     if saved:
                         from colorcorrection.levels_operator import apply_rgb_lut
-                        from colorpro.manual_tone import combined_lut
+
                         from colorpro.manual_hsl import apply_hsl
+                        from colorpro.manual_tone import combined_lut
 
                         levels, tone, hsl, balance = saved["current"]
                         pixels = apply_hsl(
                             apply_rgb_lut(pixels, combined_lut(levels, tone, balance)),
                             hsl,
                         )
-                if pixels.shape != shape:
-                    raise ValueError("Размер результата отличается от исходника")
-                after = preview_bytes(
-                    pixels[y0:y1, x0:x1] if region else pixels,
-                    None if self.full else 1500,
-                )
-        except Exception as exc:
+                after = encode(pixels)
+        except Exception as exc:  # noqa: BLE001 -- worker reports failures to the UI
             error = str(exc)
         if not self.isInterruptionRequested():
             self.loaded.emit(self.key, before, after, error)
@@ -96,10 +120,12 @@ class CompareView(QWidget):
     expand_requested = Signal()
     pixel_picked = Signal(float, float)
     native_requested = Signal()
+    viewport_changed = Signal()
 
     def __init__(self):
         super().__init__()
         self.before = self.after = None
+        self.after_detail = None
         self.mode = 0
         self.position = 0.5
         self.zoom = 1.0
@@ -133,11 +159,13 @@ class CompareView(QWidget):
 
     def set_pixmaps(self, before, after):
         self.before, self.after = before, after
+        self.after_detail = None
         self.high_detail = False
         self.reset_zoom()
 
     def clear(self, message="Выберите фотографию в очереди"):
         self.before = self.after = None
+        self.after_detail = None
         self.native_size = None
         self.high_detail = False
         self.message = message
@@ -150,18 +178,21 @@ class CompareView(QWidget):
         self.setCursor(
             Qt.CursorShape.SplitHCursor if mode == 1 else Qt.CursorShape.OpenHandCursor
         )
+        self.viewport_changed.emit()
 
     def reset_zoom(self):
         self.zoom = 1.0
         self.center = QPointF(0.5, 0.5)
         self.zoom_changed.emit(self.zoom)
         self.update()
+        self.viewport_changed.emit()
 
     def set_zoom(self, value):
         self.zoom = max(0.1, min(32.0, float(value)))
         self.clamp_center()
         self.zoom_changed.emit(self.zoom)
         self.update()
+        self.viewport_changed.emit()
         if (
             not self.high_detail
             and self.before is not None
@@ -180,8 +211,42 @@ class CompareView(QWidget):
         ]
 
     def toggle_original(self):
-        self.original_visible = not self.original_visible
+        self.set_original(not self.original_visible)
+
+    def set_original(self, visible):
+        self.original_visible = bool(visible)
         self.update()
+
+    def visible_region(self, shape):
+        """Native pixel rectangle under either synchronized pane."""
+        import math
+
+        height, width = shape[:2]
+        pane = self.panes()[0]
+        target = self.target_rect(pane)
+        x0 = max(0, math.floor((pane.left() - target.left()) / target.width() * width))
+        y0 = max(0, math.floor((pane.top() - target.top()) / target.height() * height))
+        x1 = min(
+            width, math.ceil((pane.right() - target.left()) / target.width() * width)
+        )
+        y1 = min(
+            height, math.ceil((pane.bottom() - target.top()) / target.height() * height)
+        )
+        return min(x0, width - 1), min(y0, height - 1), max(1, x1), max(1, y1)
+
+    def draw_detail(self, painter, pane):
+        if self.after_detail is None or self.original_visible or not self.native_size:
+            return
+        (x0, y0, x1, y1), pixmap = self.after_detail
+        width, height = self.native_size
+        target = self.target_rect(pane)
+        detail = QRectF(
+            target.x() + x0 / width * target.width(),
+            target.y() + y0 / height * target.height(),
+            (x1 - x0) / width * target.width(),
+            (y1 - y0) / height * target.height(),
+        )
+        painter.drawPixmap(detail, pixmap, QRectF(pixmap.rect()))
 
     def actual_size(self):
         if self.before is None:
@@ -234,9 +299,9 @@ class CompareView(QWidget):
         painter.fillRect(self.rect(), QColor("#ffffff"))
         panes = self.panes()
         captions = (
-            ["Исходное", "Исходное · Enter: результат"]
+            ["Исходное", "Исходное · отпустите Enter"]
             if self.original_visible
-            else ["Исходное", "Результат · Enter: исходное"]
+            else ["Исходное", "Результат · удерживайте Enter: исходное"]
         )
         for index in range(1 if self.mode == 2 else 2):
             header = QRectF(
@@ -274,6 +339,8 @@ class CompareView(QWidget):
                 painter.drawPixmap(
                     self.target_rect(pane), pixmap, QRectF(pixmap.rect())
                 )
+                if self.mode == 2 or (self.mode == 0 and index == 1):
+                    self.draw_detail(painter, pane)
             else:
                 painter.setPen(QColor("#c8c8c8"))
                 painter.drawText(
@@ -296,6 +363,7 @@ class CompareView(QWidget):
             painter.drawPixmap(
                 self.target_rect(pane), self.after, QRectF(self.after.rect())
             )
+            self.draw_detail(painter, pane)
             painter.restore()
             painter.setPen(QPen(QColor("#737373"), 2))
             painter.drawLine(divider, 34, divider, self.height())
@@ -336,6 +404,7 @@ class CompareView(QWidget):
                 self.clamp_center()
             self.drag_start = event.position()
             self.update()
+            self.viewport_changed.emit()
 
     def mouseReleaseEvent(self, event):
         self.drag_start = None
@@ -367,7 +436,12 @@ class CompareView(QWidget):
             )
             self.clamp_center()
             self.update()
+            self.viewport_changed.emit()
             event.accept()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.viewport_changed.emit()
 
     def keyPressEvent(self, event):
         return super().keyPressEvent(event)
@@ -448,7 +522,7 @@ class ComparePage(QWidget):
         self.faces.currentIndexChanged.connect(owner.selection_changed)
         selection.addWidget(self.faces)
         self.mode = combo_box()
-        self.mode.addItems(["Рядом", "Разделитель", "Один холст"])
+        self.mode.addItems(["2 фото", "Разделитель", "1 фото"])
         self.mode.setAccessibleName("Режим сравнения")
         selection.addWidget(self.mode)
         layout.addLayout(selection)
@@ -485,9 +559,15 @@ class ComparePage(QWidget):
         layout.addLayout(self.tools)
         self.view = CompareView()
         self.view.native_requested.connect(owner.request_native_detail)
-        self.mode.setCurrentIndex(2)
-        self.view.set_mode(2)
+        mode = str(owner.settings.value("comparison_mode", "2"))
+        mode = int(mode) if mode in {"0", "1", "2"} else 2
+        self.mode.setCurrentIndex(mode)
+        self.view.set_mode(mode)
+        owner.settings.setValue("comparison_mode", mode)
         self.mode.currentIndexChanged.connect(self.view.set_mode)
+        self.mode.currentIndexChanged.connect(
+            lambda value: owner.settings.setValue("comparison_mode", value)
+        )
         self.view.setAccessibleName("До и после, одинаковый масштаб")
         self.view.expand_requested.connect(owner.toggle_review_fullscreen)
         self.zoom_label = QLabel("1.0×")
@@ -497,6 +577,7 @@ class ComparePage(QWidget):
         workspace = QHBoxLayout()
         workspace.addWidget(self.view, 1)
         self.editor = LevelsPanel(owner)
+        self.view.viewport_changed.connect(self.editor.viewport_changed)
         self.view.pixel_picked.connect(self.editor.picked)
         workspace.addWidget(self.editor)
         from colorpro.filmstrip import Filmstrip

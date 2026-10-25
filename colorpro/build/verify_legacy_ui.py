@@ -114,9 +114,10 @@ def main():
     assert window.compare.zoom > 2
     zoom = window.compare.zoom
     center = QPointF(window.compare.center)
-    QTest.keyClick(window.compare, Qt.Key_Return)
+    window.compare.setFocus()
+    QTest.keyPress(window.compare, Qt.Key_Return)
     assert window.compare.original_visible
-    QTest.keyClick(window.compare, Qt.Key_Return)
+    QTest.keyRelease(window.compare, Qt.Key_Return)
     assert not window.compare.original_visible
     assert window.compare.zoom == zoom and window.compare.center == center
     window.open_comparison()

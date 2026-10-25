@@ -19,6 +19,7 @@ APP = [
     "detector_path.py",
     "levels.py",
     "levels_panel.py",
+    "editor_render.py",
     "manual_auto.py",
     "manual_tone.py",
     "manual_hsl.py",

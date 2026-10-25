@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from colorpro.files import preview_bytes
+from colorpro.editor_render import PreviewCancelled, PreviewRenderer
 from colorpro.levels import LevelsSession, defaults, picked_levels
 from colorpro.manual_balance import balance_defaults
-from colorpro.manual_hsl import apply_hsl, hsl_available, hsl_defaults
-from colorpro.manual_tone import combined_lut, tone_available, tone_defaults
+from colorpro.manual_hsl import hsl_available, hsl_defaults
+from colorpro.manual_tone import tone_available, tone_defaults
 from colorpro.widgets import combo_box, navigation_icon
 
 
@@ -132,11 +132,20 @@ class LevelsPanel(QWidget):
         self.dirty = False
         self.item = None
         self.saved_snapshot = None
+        self.save_task = None
+        self.save_inflight = False
+        self.save_pending = None
+        self.save_requested = self.save_confirmed = None
+        self.save_error = ""
+        self.save_revision = 0
         self.preview_task = None
         self.preview_inflight = False
         self.preview_revision = 0
         self.preview_job_revision = 0
         self.preview_pending = False
+        self.preview_epoch = 0
+        self.preview_refine = False
+        self.preview_renderer = PreviewRenderer()
         self.pick_kind = None
         self.settings = defaults()
         self.tone = tone_defaults()
@@ -401,8 +410,8 @@ class LevelsPanel(QWidget):
         layout.addWidget(self.key_help)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
-        self.timer.setInterval(45)
-        self.timer.timeout.connect(self.render_preview)
+        self.timer.setInterval(120)
+        self.timer.timeout.connect(self.refine_preview)
         self.autosave = QTimer(self)
         self.autosave.setSingleShot(True)
         self.autosave.setInterval(350)
@@ -446,43 +455,93 @@ class LevelsPanel(QWidget):
         )
 
     def flush_state(self):
+        """Capture an immutable request; disk I/O never runs in an input handler.
+
+        At most one writer and one newest pending snapshot exist. Navigation
+        waits for this queue to drain, so no old frame can overwrite a new one.
+        """
         if not self.active or self.session is None:
             return True
         self.autosave.stop()
         # Finish a number still being typed before committing a frame transition.
         for spin, _ in self.control_pairs():
             spin.interpretText()
-        current = self.snapshot()
-        try:
-            self.owner.workspace.save_edit(
-                self.item,
-                self.session.path,
-                current,
-                self.history,
-                self.future,
-                {
-                    "zoom": self.owner.compare.zoom,
-                    "center": [
-                        self.owner.compare.center.x(),
-                        self.owner.compare.center.y(),
-                    ],
-                },
-                base_sha=self.session.sha,
-            )
-        except (OSError, ValueError, TypeError) as error:
-            self.status.setText("Не удалось сохранить правки: " + str(error))
-            self.owner.error(self.status.text())
-            return False
-        self.saved_snapshot = copy.deepcopy(current)
-        self.dirty = False
-        self.status.setText("Правки сохранены · экспорт — отдельной кнопкой")
+        value = {
+            "item": self.item,
+            "base": self.session.path,
+            "current": self.snapshot(),
+            "history": copy.deepcopy(self.history),
+            "future": copy.deepcopy(self.future),
+            "view": {
+                "zoom": self.owner.compare.zoom,
+                "center": [
+                    self.owner.compare.center.x(),
+                    self.owner.compare.center.y(),
+                ],
+            },
+            "base_sha": self.session.sha,
+        }
+        if value != self.save_requested or self.save_error:
+            self.save_revision += 1
+            self.save_requested = value
+            self.save_pending = (self.save_revision, value)
+            self.save_error = ""
+            self.start_state_save()
         return True
+
+    def start_state_save(self):
+        if self.save_inflight or self.save_pending is None:
+            return
+        revision, value = self.save_pending
+        self.save_pending = None
+        self.save_inflight = True
+
+        def save():
+            self.owner.workspace.save_edit(**value)
+            return revision, value
+
+        self.save_task = LevelsTask(save)
+        self.save_task.completed.connect(self.state_saved)
+        self.save_task.finished.connect(self.state_save_finished)
+        self.save_task.start()
+
+    def state_saved(self, result, error):
+        if error:
+            self.save_error = error
+            self.dirty = True
+            self.status.setText("Не удалось сохранить правки: " + error)
+            self.owner.error(self.status.text())
+            return
+        revision, value = result
+        self.save_error = ""
+        self.save_confirmed = value
+        # An older acknowledgement cannot mark a newer edit as saved.
+        if (
+            revision == self.save_revision
+            and value["current"] == self.snapshot()
+            and value["history"] == self.history
+            and value["future"] == self.future
+        ):
+            self.saved_snapshot = copy.deepcopy(value["current"])
+            self.dirty = False
+            self.status.setText("Правки сохранены · экспорт — отдельной кнопкой")
+
+    def state_save_finished(self):
+        self.save_inflight = False
+        self.start_state_save()
+        self.finish_departure()
+
+    def state_idle(self):
+        return not self.save_inflight and self.save_pending is None
 
     def leave(self, callback):
         self.departure = callback
+        self.flush_state()
         self.timer.stop()
         self.preview_pending = False
+        self.preview_refine = False
         self.preview_revision += 1
+        self.preview_epoch += 1
         if self.running() or self.preview_running():
             self.status.setText("Завершение текущей операции…")
             return
@@ -491,8 +550,10 @@ class LevelsPanel(QWidget):
     def finish_departure(self):
         if self.departure is None or self.running() or self.preview_running():
             return
-        callback, self.departure = self.departure, None
-        if not self.flush_state():
+        if not self.state_idle():
+            return
+        if self.save_error:
+            self.departure = None
             self.owner.requested_photo = None
             self.owner.table.blockSignals(True)
             self.owner.table.selectionModel().blockSignals(True)
@@ -501,6 +562,11 @@ class LevelsPanel(QWidget):
             self.owner.table.blockSignals(False)
             self.owner.sync_review()
             return
+        # Controls can still change while a disk write is in progress.
+        self.flush_state()
+        if not self.state_idle():
+            return
+        callback, self.departure = self.departure, None
         self.end(refresh=False, persist=False)
         callback()
 
@@ -620,6 +686,10 @@ class LevelsPanel(QWidget):
         self.history.clear()
         self.future.clear()
         self.session = None
+        self.save_requested = self.save_confirmed = None
+        self.save_error = ""
+        self.preview_epoch += 1
+        self.preview_renderer = PreviewRenderer()
         self.setVisible(tool != "resume" or owner.review.panel_toggle.isChecked())
         owner.set_busy(True)
         owner.nav_status.setText("Ручная коррекция")
@@ -762,6 +832,7 @@ class LevelsPanel(QWidget):
 
     def end_gesture(self):
         self.group_change = self.group_recorded = False
+        self.refine_preview()
 
     def undo_edit(self):
         if self.running() or not self.history:
@@ -785,32 +856,32 @@ class LevelsPanel(QWidget):
             value / 100 if key == "gamma" else int(value)
         )
         self.refresh_controls()
-        self.timer.start()
+        self.render_preview()
 
     def change_tone(self, key, value):
         self.remember()
         self.tone[key] = int(value)
         self.refresh_controls()
-        self.timer.start()
+        self.render_preview()
 
     def change_hsl(self, key, value):
         self.remember()
         self.hsl[key] = int(value)
         self.refresh_controls()
-        self.timer.start()
+        self.render_preview()
 
     def change_balance(self, channel, value):
         self.remember()
         band = ("shadows", "midtones", "highlights")[self.balance_band.currentIndex()]
         self.balance[band][channel] = int(value)
         self.refresh_controls()
-        self.timer.start()
+        self.render_preview()
 
     def change_preserve_luminosity(self, checked):
         self.remember()
         self.balance["preserve_luminosity"] = bool(checked)
         self.refresh_controls()
-        self.timer.start()
+        self.render_preview()
 
     def reset_all(self):
         self.remember()
@@ -877,15 +948,35 @@ class LevelsPanel(QWidget):
         self.render_preview()
 
     def render_preview(self, *args):
-        self.timer.stop()
         if self.session is None or not self.active:
             return
         if self.snapshot() != self.saved_snapshot:
             self.dirty = True
+        # History can change even when Undo returns to the last saved pixels.
+        # In particular, undoing while an older write is in flight must enqueue
+        # the returned value too. flush_state deduplicates complete captures.
+        if not self.autosave.isActive():
             self.autosave.start()
         self.preview_revision += 1
         self.preview_pending = True
+        self.preview_refine = False
+        self.owner.compare.after_detail = None
+        self.timer.start()
         self.start_preview()
+
+    def viewport_changed(self):
+        if self.active and self.session is not None:
+            self.preview_revision += 1
+            self.owner.compare.after_detail = None
+            self.timer.start()
+            if not self.autosave.isActive():
+                self.autosave.start()
+
+    def refine_preview(self):
+        self.timer.stop()
+        if self.active and self.session is not None and self.departure is None:
+            self.preview_refine = True
+            self.start_preview()
 
     def preview_running(self):
         # A finished thread may still have queued result/finished signals.
@@ -895,6 +986,7 @@ class LevelsPanel(QWidget):
         return (
             not self.preview_running()
             and not self.preview_pending
+            and not self.preview_refine
             and not self.timer.isActive()
         )
 
@@ -902,33 +994,46 @@ class LevelsPanel(QWidget):
         if (
             not self.active
             or self.session is None
-            or not self.preview_pending
+            or not (self.preview_pending or self.preview_refine)
             or self.preview_running()
         ):
             return
-        from colorcorrection.levels_operator import apply_rgb_lut
-
-        pixels = self.session.preview
-        high_detail = self.owner.compare.high_detail
-        if high_detail:
-            pixels = self.session.pixels
-        settings, tone, hsl, balance = self.snapshot()
+        quick = self.preview_pending
+        region = None
+        if quick:
+            pixels = getattr(self.session, "quick_preview", self.session.preview)
+        else:
+            pixels = self.session.preview
+            if self.owner.compare.high_detail:
+                region = self.owner.compare.visible_region(self.session.pixels.shape)
+                x0, y0, x1, y1 = region
+                pixels = self.session.pixels[y0:y1, x0:x1]
+        snapshot = self.snapshot()
         enabled = self.preview.isChecked()
         revision = self.preview_revision
+        epoch = self.preview_epoch
+        renderer = self.preview_renderer
         self.preview_job_revision = revision
         self.preview_pending = False
+        if not quick:
+            self.preview_refine = False
 
         def render():
-            result = pixels
-            if enabled:
-                result = apply_rgb_lut(result, combined_lut(settings, tone, balance))
-                result = apply_hsl(result, hsl)
-            data = (
-                preview_bytes(result, max_size=None)
-                if high_detail
-                else preview_bytes(result)
-            )
-            return revision, data
+            # Cheap frames finish during continuous dragging. Expensive detail
+            # work is cancelled between pixel chunks as soon as input changes.
+            try:
+                data = renderer.render(
+                    pixels,
+                    snapshot,
+                    enabled,
+                    lambda: (
+                        epoch != self.preview_epoch
+                        or (not quick and revision != self.preview_revision)
+                    ),
+                )
+            except PreviewCancelled:
+                return None
+            return epoch, revision, quick, region, data
 
         self.preview_task = LevelsTask(render)
         self.preview_task.completed.connect(self.preview_loaded)
@@ -937,18 +1042,27 @@ class LevelsPanel(QWidget):
         self.preview_task.start()
 
     def preview_loaded(self, result, error):
-        if not self.active:
+        if not self.active or self.departure is not None:
             return
         if error:
             if self.preview_job_revision == self.preview_revision:
                 self.status.setText(error)
             return
-        revision, data = result
-        if revision != self.preview_revision:
+        if result is None:
             return
-        pixmap = QPixmap()
-        pixmap.loadFromData(data, "PNG")
-        self.owner.compare.after = pixmap
+        epoch, revision, quick, region, data = result
+        if epoch != self.preview_epoch or (
+            not quick and revision != self.preview_revision
+        ):
+            return
+        # There is one renderer: presented quick frames are always monotonic,
+        # even when a newer request is waiting. No obsolete backlog is retained.
+        pixmap = QPixmap.fromImage(data)
+        if region is None:
+            self.owner.compare.after = pixmap
+            self.owner.compare.after_detail = None
+        else:
+            self.owner.compare.after_detail = (region, pixmap)
         self.owner.compare.update()
 
     def preview_finished(self):
@@ -1019,15 +1133,13 @@ class LevelsPanel(QWidget):
 
     def cancel_edit(self):
         self.owner.edit_on_selection = False
-        self.leave(self.owner.selection_changed)
+        self.leave(self.owner.sync_review)
 
     def end(self, refresh=True, persist=True):
-        if (
-            persist
-            and self.active
-            and self.session is not None
-            and not self.flush_state()
-        ):
+        if persist and self.active and self.session is not None:
+            if refresh:
+                self.owner.edit_on_selection = False
+            self.leave(self.owner.sync_review)
             return
         self.pick(None)
         self.timer.stop()
@@ -1036,7 +1148,9 @@ class LevelsPanel(QWidget):
         self.departure = None
         self.pending_tool = None
         self.preview_revision += 1
+        self.preview_epoch += 1
         self.preview_pending = False
+        self.preview_refine = False
         self.session = None
         self.hide()
         owner = self.owner

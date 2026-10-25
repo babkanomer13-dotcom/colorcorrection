@@ -255,10 +255,14 @@ def test_autosave_does_not_export_and_enter_keeps_view(app, desktop):
     pos = QPointF(owner.compare.center)
     gamma.setFocus()
     QTest.keyClick(gamma, Qt.Key.Key_Return)
+    assert not owner.compare.original_visible
+    owner.compare.setFocus()
+    QTest.keyPress(owner.compare, Qt.Key.Key_Return)
     assert owner.compare.original_visible
-    QTest.keyClick(gamma, Qt.Key.Key_Enter)
+    QTest.keyRelease(owner.compare, Qt.Key.Key_Return)
     assert not owner.compare.original_visible
     assert owner.compare.zoom == 3 and owner.compare.center == pos
+    gamma.setFocus()
     QTest.keyClick(gamma, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
     assert editor.settings[0]["gamma"] == 1
     QTest.keyClick(
@@ -298,6 +302,7 @@ def test_close_reopen_restores_queue_and_edit(app, desktop):
     try:
         pump(app, lambda: len(reopened.queue.items) == 3)
         reopened.show_page(reopened.COMPARE)
+        pump(app, lambda: reopened.review.editor.session is not None)
         new_editor = begin(app, reopened)
         assert new_editor.settings[0]["gamma"] == 1.4
         assert new_editor.history
@@ -513,6 +518,7 @@ def test_repeated_navigation_keeps_values_separate(app, desktop):
         editor = begin(app, owner)
         editor.controls["gamma"][0].setValue(1 + index / 10)
         assert editor.flush_state()
+        pump(app, editor.state_idle)
     for index, item in enumerate(owner.queue.items):
         saved = owner.workspace.load_edit(
             item, owner.queue.results[index]["base_output"]
