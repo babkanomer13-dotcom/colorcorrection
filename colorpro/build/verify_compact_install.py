@@ -7,15 +7,67 @@ older baseline predates AllowNoIcons, so /NOICONS alone is insufficient there.
 
 import argparse
 import contextlib
+import ctypes
 import json
 import os
 import shutil
 import subprocess
+import time
 import winreg
 from pathlib import Path
 
 from colorpro.build.compact import inventory
 from colorpro.updates import sha256
+
+
+@contextlib.contextmanager
+def deny_content_reads(path):
+    """Prove an ordinary update cannot be reading the unchanged model file."""
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create.restype = ctypes.c_void_p
+    close = kernel.CloseHandle
+    close.argtypes = [ctypes.c_void_p]
+    close.restype = ctypes.c_int
+    # FILE_SHARE_WRITE | FILE_SHARE_DELETE; intentionally no FILE_SHARE_READ.
+    handle = create(str(path), 0x80000000, 6, None, 3, 0, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        try:
+            path.read_bytes()
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("Read-denial guard did not take effect")
+        yield
+    finally:
+        assert close(handle)
+
+
+def assert_fast_log(path, install, plan):
+    log = path.read_text("utf-8-sig")
+    assert (
+        "COMPACT_FAST_CHECK: supported baseline; unchanged components not read." in log
+    )
+    assert "COMPACT_FULL_CHECK:" not in log
+    assert log.count("BASELINE_HASH:") == 1
+    hashed = [
+        line.split("FILE_HASH: ", 1)[1]
+        for line in log.splitlines()
+        if "FILE_HASH: " in line
+    ]
+    allowed = {str(install / name).lower() for name in plan["changed"]}
+    assert hashed and all(name.lower() in allowed for name in hashed), hashed
 
 
 @contextlib.contextmanager
@@ -26,8 +78,14 @@ def preserved_registration(platform):
     }[platform]
     name = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{" + guid + "}_is1"
     product = "ColorPro" if platform == "win10" else "ColorPro Win7"
-    shortcuts = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs" / product
-    shortcut_names = [product + ".lnk", "Проверка компонентов.lnk", "Удалить " + product + ".lnk"]
+    shortcuts = (
+        Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs" / product
+    )
+    shortcut_names = [
+        product + ".lnk",
+        "Проверка компонентов.lnk",
+        "Удалить " + product + ".lnk",
+    ]
     saved_shortcuts = {
         n: (shortcuts / n).read_bytes() if (shortcuts / n).is_file() else None
         for n in shortcut_names
@@ -38,7 +96,9 @@ def preserved_registration(platform):
             winreg.HKEY_CURRENT_USER, name, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY
         ) as key:
             assert winreg.QueryInfoKey(key)[0] == 0
-            values = [winreg.EnumValue(key, i) for i in range(winreg.QueryInfoKey(key)[1])]
+            values = [
+                winreg.EnumValue(key, i) for i in range(winreg.QueryInfoKey(key)[1])
+            ]
     except FileNotFoundError:
         pass
     try:
@@ -53,18 +113,24 @@ def preserved_registration(platform):
                 path.write_bytes(data)
         try:
             with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, name, 0, winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY
+                winreg.HKEY_CURRENT_USER,
+                name,
+                0,
+                winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY,
             ) as key:
                 assert winreg.QueryInfoKey(key)[0] == 0
                 for item in [
-                    winreg.EnumValue(key, i)[0] for i in range(winreg.QueryInfoKey(key)[1])
+                    winreg.EnumValue(key, i)[0]
+                    for i in range(winreg.QueryInfoKey(key)[1])
                 ]:
                     winreg.DeleteValue(key, item)
                 if values is not None:
                     for item, value, kind in values:
                         winreg.SetValueEx(key, item, 0, kind, value)
             if values is None:
-                winreg.DeleteKeyEx(winreg.HKEY_CURRENT_USER, name, winreg.KEY_WOW64_64KEY)
+                winreg.DeleteKeyEx(
+                    winreg.HKEY_CURRENT_USER, name, winreg.KEY_WOW64_64KEY
+                )
         except FileNotFoundError:
             if values is not None:
                 with winreg.CreateKeyEx(
@@ -115,6 +181,9 @@ def main():
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=False)
     expected = inventory(args.dist)
+    plan = json.loads(
+        (args.installer.parent / (args.platform + "-compact.json")).read_text("utf8")
+    )
     upgrade = root / "upgrade"
     shutil.copytree(args.base, upgrade)
     sentinel = upgrade / "user-photos-untouched.txt"
@@ -128,21 +197,45 @@ def main():
     component.write_bytes(b"damaged component for isolated acceptance")
     before = inventory(upgrade)
     with preserved_registration(args.platform) as registration:
-        code = run_installer(args.installer, upgrade, root / "corrupt.log", "/COLORPROUPDATE=1")
+        code = run_installer(
+            args.installer,
+            upgrade,
+            root / "corrupt.log",
+            "/COLORPROUPDATE=1",
+            "/VERIFYALL=1",
+        )
         assert code != 0
         assert inventory(upgrade) == before, "Broken baseline must remain untouched"
-        assert run_installer(args.installer, upgrade, root / "corrupt-manual.log") != 0
-        assert inventory(upgrade) == before, "Manual patch must not reinstall a baseline"
-        component.write_bytes(original)
+        # Unknown manifests and missing core files are still refused before writes.
+        manifest = component.parent.parent / "manifest.json"
+        manifest_bytes = manifest.read_bytes()
+        manifest.write_text('{"platform":"wrong-channel"}', encoding="utf8")
+        unknown = inventory(upgrade)
+        assert (
+            run_installer(args.installer, upgrade, root / "unknown-baseline.log") != 0
+        )
+        assert inventory(upgrade) == unknown
+        manifest.write_bytes(manifest_bytes)
+        component.unlink()
+        missing = inventory(upgrade)
+        assert run_installer(args.installer, upgrade, root / "missing-core.log") != 0
+        assert inventory(upgrade) == missing
+        component.write_bytes(b"damaged component for isolated acceptance")
         os.utime(component, (946684800, 946684800))
         stamp = component.stat().st_mtime_ns
-        assert (
-            run_installer(args.installer, upgrade, root / "upgrade.log", "/COLORPROUPDATE=1") == 0
-        )
-        assert "COMPACT_UPDATE: runtime verified; no component download." in (
-            root / "upgrade.log"
-        ).read_text("utf-8-sig")
+        started = time.monotonic()
+        with deny_content_reads(component):
+            assert (
+                run_installer(
+                    args.installer, upgrade, root / "upgrade.log", "/COLORPROUPDATE=1"
+                )
+                == 0
+            )
+        upgrade_seconds = time.monotonic() - started
+        assert_fast_log(root / "upgrade.log", upgrade, plan)
         assert component.stat().st_mtime_ns == stamp
+        assert component.read_bytes() == b"damaged component for isolated acceptance"
+        component.write_bytes(original)
         assert sentinel.read_text("utf8") == "user data must survive maintenance"
         assert_distribution(upgrade, expected)
         with winreg.OpenKey(
@@ -154,7 +247,10 @@ def main():
             installed_version = winreg.QueryValueEx(key, "DisplayVersion")[0]
             winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "99.0.0")
         assert (
-            run_installer(args.installer, upgrade, root / "downgrade.log", "/COLORPROUPDATE=1") != 0
+            run_installer(
+                args.installer, upgrade, root / "downgrade.log", "/COLORPROUPDATE=1"
+            )
+            != 0
         )
         assert_distribution(upgrade, expected)
         with winreg.OpenKey(
@@ -163,14 +259,17 @@ def main():
             0,
             winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY,
         ) as key:
-            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, installed_version)
+            winreg.SetValueEx(
+                key, "DisplayVersion", 0, winreg.REG_SZ, installed_version
+            )
         fresh = root / "fresh"
         assert run_installer(args.installer, fresh, root / "patch-on-empty.log") != 0
         assert not fresh.exists(), "A patch must not bootstrap a fresh installation"
         assert run_installer(args.offline, fresh, root / "fresh.log") == 0
-        assert "OFFLINE_INSTALL: all components embedded; identical files are preserved." in (
-            root / "fresh.log"
-        ).read_text("utf-8-sig")
+        assert (
+            "OFFLINE_INSTALL: all components embedded; identical files are preserved."
+            in (root / "fresh.log").read_text("utf-8-sig")
+        )
         assert_distribution(fresh, expected)
         # Deliberately different mtimes: Inno normally restores archived mtimes
         # on replacement, so comparing only original timestamps proves nothing.
@@ -179,7 +278,9 @@ def main():
         stamps = {name: (fresh / name).stat().st_mtime_ns for name in expected}
         assert run_installer(args.offline, fresh, root / "repeat-offline.log") == 0
         assert_distribution(fresh, expected)
-        assert all((fresh / n).stat().st_mtime_ns == stamp for n, stamp in stamps.items())
+        assert all(
+            (fresh / n).stat().st_mtime_ns == stamp for n, stamp in stamps.items()
+        )
         repair = fresh / component.relative_to(upgrade)
         repair.write_bytes(b"damage to test selective offline repair")
         assert run_installer(args.offline, fresh, root / "repair-offline.log") == 0
@@ -205,7 +306,9 @@ def main():
             0,
             winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_64KEY,
         ) as key:
-            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, installed_version)
+            winreg.SetValueEx(
+                key, "DisplayVersion", 0, winreg.REG_SZ, installed_version
+            )
         env = os.environ.copy()
         env["LOCALAPPDATA"] = str(root / "profile")
         env["QT_QPA_PLATFORM"] = "offscreen"
@@ -250,7 +353,11 @@ def main():
         full_rerun_preserves_all_distribution_mtimes=True,
         full_repairs_only_damaged_files=True,
         unchanged_runtime_not_replaced=True,
-        corrupt_baseline_no_mutation=True,
+        explicit_full_check_refuses_corrupt_baseline=True,
+        compact_does_not_read_unchanged_components=True,
+        compact_component_read_denial_passed=True,
+        unknown_baseline_and_missing_core_refused=True,
+        compact_upgrade_seconds=round(upgrade_seconds, 3),
         downgrade_blocked=True,
         single_exe_fresh_install=True,
         installed_smoke=True,

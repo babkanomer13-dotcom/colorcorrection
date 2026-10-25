@@ -1,7 +1,8 @@
 """Build file-level update payloads against immutable, released runtime baselines.
 
 All supported bases are compared. A file is omitted ONLY if identical in every
-base. The installer verifies omitted files before any replacement. No model or
+base. Routine installation checks the small baseline manifest and changed files;
+full runtime hashing is reserved for explicit verification/recovery. No model or
 runtime DLL is silently bundled into a routine code update.
 """
 
@@ -84,6 +85,20 @@ def generate(dist, bases, output, platform, offline=False, baseline_inventories=
         validated_inventory(data) for data in baseline_inventories
     ]
     changed, required = (current, {}) if offline else plan(current, baselines)
+    prefix = "_internal/" if platform == "win10" else ""
+    manifest = prefix + "payload/manifest.json"
+    anchors = [
+        "ColorPro.exe",
+        prefix + ("python312.dll" if platform == "win10" else "python38.dll"),
+        prefix
+        + ("PySide6/Qt6Core.dll" if platform == "win10" else "PySide2/Qt5Core.dll"),
+        prefix + "payload/weights/v39.pt",
+        prefix + "payload/weights/yunet.onnx",
+    ]
+    if not offline and any(
+        not set(anchors + [manifest]).issubset(base) for base in [current] + baselines
+    ):
+        raise ValueError("Missing baseline identity or core components")
     output.mkdir(parents=True, exist_ok=False)
     # Static, validated source paths; no downloaded manifest can choose destinations.
     lines = []
@@ -105,8 +120,21 @@ def generate(dist, bases, output, platform, offline=False, baseline_inventories=
         encoding="utf8",
     )
     (output / "targets.txt").write_text(
-        "\n".join(n.replace("/", "\\") for n in current), encoding="utf8"
+        "\n".join(n.replace("/", "\\") for n in changed), encoding="utf8"
     )
+    if not offline:
+        (output / "baselines.txt").write_text(
+            "\n".join(
+                digest + "|" + manifest.replace("/", "\\")
+                for digest in sorted(
+                    {base[manifest]["sha256"] for base in baselines + [current]}
+                )
+            ),
+            encoding="utf8",
+        )
+        (output / "anchors.txt").write_text(
+            "\n".join(n.replace("/", "\\") for n in anchors), encoding="utf8"
+        )
     report = {
         "schema": "colorpro-offline-v1" if offline else "colorpro-compact-v1",
         "version": __version__,
@@ -116,6 +144,7 @@ def generate(dist, bases, output, platform, offline=False, baseline_inventories=
         "download_bytes": 0,
         "changed_bytes": sum(r["size"] for r in changed.values()),
         "preserved_bytes": sum(r["size"] for r in required.values()),
+        "verification": "full-repair" if offline else "baseline-and-changed-files",
     }
     (output / ("offline.json" if offline else "compact.json")).write_text(
         json.dumps(report, indent=2), encoding="utf8"

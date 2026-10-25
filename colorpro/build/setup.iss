@@ -1,5 +1,5 @@
 #ifndef ProductVersion
-  #define ProductVersion "1.7.0"
+  #define ProductVersion "1.7.1"
 #endif
 #ifdef Legacy
   #define ProductName "ColorPro Win7"
@@ -80,6 +80,8 @@ Name: "desktopicon"; Description: "Создать ярлык на рабочем
 Source: "{#PayloadRoot}\targets.txt"; Flags: dontcopy
 #ifdef CompactRoot
 Source: "{#CompactRoot}\required.txt"; Flags: dontcopy
+Source: "{#CompactRoot}\baselines.txt"; Flags: dontcopy
+Source: "{#CompactRoot}\anchors.txt"; Flags: dontcopy
 #endif
 
 [Icons]

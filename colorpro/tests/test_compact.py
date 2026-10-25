@@ -8,6 +8,24 @@ def row(hash, size=10):
     return dict(sha256=hash * 64, size=size)
 
 
+def make_runtime(path, platform="win10"):
+    prefix = "_internal/" if platform == "win10" else ""
+    names = [
+        "payload/manifest.json",
+        "payload/weights/v39.pt",
+        "payload/weights/yunet.onnx",
+    ]
+    names += (
+        ["python312.dll", "PySide6/Qt6Core.dll"]
+        if platform == "win10"
+        else ["python38.dll", "PySide2/Qt5Core.dll"]
+    )
+    for name in names:
+        target = path / (prefix + name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((platform + name).encode())
+
+
 def test_compact_compares_every_supported_version():
     old = {"ColorPro.exe": row("a"), "runtime.dll": row("b"), "readme.txt": row("c")}
     middle = dict(old, **{"readme.txt": row("d")})
@@ -62,10 +80,14 @@ def test_compact_has_no_first_install_fallback(tmp_path):
         path.mkdir()
         (path / "runtime.dll").write_bytes(b"runtime")
         (path / "ColorPro.exe").write_bytes(path.name.encode())
+        make_runtime(path)
     report = generate(dist, [base], tmp_path / "plan", "win10")
     assert report["download_bytes"] == 0
     assert set(report["changed"]) == {"ColorPro.exe"}
-    assert set(report["required"]) == {"runtime.dll"}
+    assert "runtime.dll" in report["required"]
+    assert (tmp_path / "plan/targets.txt").read_text() == "ColorPro.exe"
+    assert "runtime.dll" not in (tmp_path / "plan/anchors.txt").read_text()
+    assert report["verification"] == "baseline-and-changed-files"
     assert not (tmp_path / "plan/baseline.iss").exists()
 
 
@@ -77,6 +99,7 @@ def test_archived_inventory_has_identical_compact_plan(tmp_path):
         path.mkdir()
         (path / "runtime.dll").write_bytes(b"unchanged runtime")
         (path / "ColorPro.exe").write_bytes(path.name.encode())
+        make_runtime(path)
     physical = generate(dist, [base], tmp_path / "physical", "win10")
     archived = generate(
         dist, [], tmp_path / "archived", "win10", baseline_inventories=[inventory(base)]
@@ -85,6 +108,38 @@ def test_archived_inventory_has_identical_compact_plan(tmp_path):
     assert (tmp_path / "physical/files.iss").read_bytes() == (
         tmp_path / "archived/files.iss"
     ).read_bytes()
+
+
+@pytest.mark.parametrize("platform", ["win10", "win7"])
+def test_fast_check_accepts_only_known_channel_manifests(tmp_path, platform):
+    from colorpro.build.compact import inventory
+
+    current, older = tmp_path / "current", tmp_path / "older"
+    prefix = "_internal/" if platform == "win10" else ""
+    manifest = prefix + "payload/manifest.json"
+    for path in (current, older):
+        make_runtime(path, platform)
+        (path / "ColorPro.exe").write_bytes(path.name.encode())
+        (path / manifest).write_bytes(path.name.encode())
+    output = tmp_path / "plan"
+    generate(current, [older], output, platform)
+    rows = (output / "baselines.txt").read_text().splitlines()
+    assert set(rows) == {
+        updates.sha256(path / manifest) + "|" + manifest.replace("/", "\\")
+        for path in (current, older)
+    }
+    assert len((output / "anchors.txt").read_text().splitlines()) == 5
+    wrong_channel = inventory(older)
+    wrong_channel.pop(manifest)
+    with pytest.raises(ValueError, match="identity"):
+        generate(
+            current,
+            [],
+            tmp_path / "bad",
+            platform,
+            baseline_inventories=[wrong_channel],
+        )
+    assert not (tmp_path / "bad").exists()
 
 
 def test_archived_inventory_rejects_invalid_digest_and_path():

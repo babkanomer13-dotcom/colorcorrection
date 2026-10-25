@@ -25,7 +25,10 @@ function MatchesFile(Name, Hash: String): Boolean;
 begin
   Result := False;
   if not SafePath(Name) then RaiseException('Недопустимая ссылка в папке установки.');
-  if FileExists(Name) then Result := CompareText(GetSHA256OfFile(Name), Hash) = 0;
+  if FileExists(Name) then begin
+    Log('FILE_HASH: ' + Name);
+    Result := CompareText(GetSHA256OfFile(Name), Hash) = 0;
+  end;
 end;
 
 function NeedsFile(Name, Hash: String): Boolean;
@@ -36,7 +39,7 @@ end;
 function VerifyComponents: Boolean;
 var Rows: TStringList; I: Integer;
 #ifdef CompactRoot
-  Sep: Integer; Name, Hash: String;
+  Sep: Integer; Name, Hash, ActualHash: String; KnownBaseline: Boolean;
 #endif
 begin
   Result := False;
@@ -49,13 +52,53 @@ begin
       if not SafePath(ExpandConstant('{app}\') + Rows[I]) then
         RaiseException('Недопустимая ссылка в папке установки.');
 #ifdef CompactRoot
+    { Recognize a supported channel using its small manifest, never by hashing
+      multi-gigabyte libraries. Check only a handful of core paths for presence. }
+    VerifyPage.SetText('Подготовка обновления', 'Проверяем совместимость версии');
+    ExtractTemporaryFile('anchors.txt');
+    Rows.LoadFromFile(ExpandConstant('{tmp}\anchors.txt'));
+    for I := 0 to Rows.Count - 1 do begin
+      Name := Rows[I];
+      if not SafePath(ExpandConstant('{app}\') + Name) then
+        RaiseException('Недопустимая ссылка в папке установки.');
+      if not FileExists(ExpandConstant('{app}\') + Name) then begin
+        MissingComponent := Name;
+        Exit;
+      end;
+    end;
+    ExtractTemporaryFile('baselines.txt');
+    Rows.LoadFromFile(ExpandConstant('{tmp}\baselines.txt'));
+    KnownBaseline := False;
+    ActualHash := '';
+    for I := 0 to Rows.Count - 1 do begin
+      Sep := Pos('|', Rows[I]);
+      Hash := Copy(Rows[I], 1, Sep - 1);
+      Name := Copy(Rows[I], Sep + 1, MaxInt);
+      if I = 0 then begin
+        MissingComponent := Name;
+        if not SafePath(ExpandConstant('{app}\') + Name) then
+          RaiseException('Недопустимая ссылка в папке установки.');
+        if not FileExists(ExpandConstant('{app}\') + Name) then Exit;
+        Log('BASELINE_HASH: ' + Name);
+        ActualHash := GetSHA256OfFile(ExpandConstant('{app}\') + Name);
+      end;
+      if CompareText(ActualHash, Hash) = 0 then KnownBaseline := True;
+    end;
+    if not KnownBaseline then Exit;
+    if ExpandConstant('{param:VERIFYALL|0}') <> '1' then begin
+      Log('COMPACT_FAST_CHECK: supported baseline; unchanged components not read.');
+      Result := True;
+      Exit;
+    end;
+    { Optional diagnosis before any writes; normal updates never enter here. }
+    Log('COMPACT_FULL_CHECK: explicitly requested.');
     ExtractTemporaryFile('required.txt');
     Rows.LoadFromFile(ExpandConstant('{tmp}\required.txt'));
     for I := 0 to Rows.Count - 1 do begin
       Sep := Pos('|', Rows[I]);
       Hash := Copy(Rows[I], 1, Sep - 1);
       Name := Copy(Rows[I], Sep + 1, MaxInt);
-      VerifyPage.SetText('Проверяем установленные компоненты', Name);
+      VerifyPage.SetText('Полная проверка компонентов', Name);
       VerifyPage.SetProgress(I, Rows.Count);
       if not MatchesFile(ExpandConstant('{app}\') + Name, Hash) then begin
         MissingComponent := Name;
@@ -117,7 +160,7 @@ begin
       RaiseException('Этот файл — только обновление. Компонент отсутствует или изменён: ' + MissingComponent + #13#10 +
         'Файлы приложения не изменены. Для первой установки или восстановления скачайте полный установщик с окончанием -Offline.exe со страницы github.com/babkanomer13-dotcom/colorcorrection/releases/latest.');
 #ifdef CompactRoot
-    Log('COMPACT_UPDATE: runtime verified; no component download.');
+    Log('COMPACT_UPDATE: changed files only; no component download.');
 #else
     Log('OFFLINE_INSTALL: all components embedded; identical files are preserved.');
 #endif
