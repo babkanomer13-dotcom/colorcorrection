@@ -39,6 +39,35 @@ class UpdateWorker(QThread):
             self.failed.emit(str(error))
 
 
+class UpdateOffer(QFrame):
+    """A dismissible in-app offer; never interrupts work or installs on its own."""
+
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.setObjectName("notice")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(16)
+        layout.addWidget(icon_tile("refresh", 44))
+        text = QVBoxLayout()
+        self.title = QLabel()
+        self.title.setTextFormat(Qt.TextFormat.PlainText)
+        self.title.setObjectName("section")
+        text.addWidget(self.title)
+        hint = QLabel("Можно обновиться сейчас или продолжить работу.")
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        text.addWidget(hint)
+        layout.addLayout(text, 1)
+        self.later = QPushButton("Позже")
+        self.update = QPushButton("Обновить")
+        self.update.setObjectName("primary")
+        for control in (self.later, self.update):
+            control.setCursor(Qt.CursorShape.PointingHandCursor)
+            layout.addWidget(control)
+        self.hide()
+
+
 class UpdatePage(QWidget):
     available = Signal(str)
     idle = Signal()
@@ -184,6 +213,7 @@ class UpdatePage(QWidget):
         self.release = release
         if release is None:
             self.status.setText("У вас последняя версия ColorPro.")
+            self.available.emit("")
             return
         size = sum(row["size"] for row in release["files"]) / 1024**2
         self.status.setText("Доступна ColorPro {} · {:.1f} МБ".format(release["version"], size))

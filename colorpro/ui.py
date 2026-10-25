@@ -582,7 +582,7 @@ class Window(QMainWindow):
         self.open_photo = self.review.open_file
         self.pages.addWidget(self.review)
         self.pages.addWidget(self.settings_page())
-        from colorpro.update_dialog import UpdatePage
+        from colorpro.update_dialog import UpdateOffer, UpdatePage
 
         self.update_page = UpdatePage(self)
         self.pages.addWidget(self.wrap_page(self.update_page))
@@ -595,6 +595,12 @@ class Window(QMainWindow):
         workspace_layout.setSpacing(0)
         self.chrome = ChromeBar(self)
         workspace_layout.addWidget(self.chrome)
+        self.update_offer = UpdateOffer(self)
+        self.dismissed_updates = set()
+        self.startup_update_checked = False
+        self.update_offer.later.clicked.connect(self.dismiss_update_offer)
+        self.update_offer.update.clicked.connect(self.accept_update_offer)
+        workspace_layout.addWidget(self.update_offer)
         workspace_layout.addWidget(self.pages, 1)
         outer.addWidget(workspace, 1)
         self.setCentralWidget(shell)
@@ -629,9 +635,7 @@ class Window(QMainWindow):
         )
         self.remove.setEnabled(False)
         self.clear.setEnabled(False)
-        self.update_page.available.connect(
-            lambda version: self.updates.setText("Обновления  •")
-        )
+        self.update_page.available.connect(self.show_update_offer)
         self.update_page.idle.connect(self.update_idle)
         self.sidebar_collapsed = (
             str(self.settings.value("sidebar_collapsed", "false")).lower() == "true"
@@ -647,7 +651,7 @@ class Window(QMainWindow):
             )
         )
         QTimer.singleShot(0, self.restore_workspace)
-        QTimer.singleShot(8000, self.auto_check_updates)
+        QTimer.singleShot(1200, self.auto_check_updates)
 
     def persist_queue(self):
         self.queue_timer.stop()
@@ -1075,29 +1079,59 @@ class Window(QMainWindow):
             self.sync_review()
 
     def update_idle(self):
+        self.update_offer.update.setEnabled(True)
         if self.close_requested:
             self.close()
+
+    def show_update_offer(self, version):
+        self.updates.setText("Обновления  •" if version else "Обновления")
+        if not version:
+            self.update_offer.hide()
+            return
+        if version in self.dismissed_updates or self.close_requested:
+            return
+        self.update_offer.title.setText("Доступна новая версия ColorPro " + version)
+        self.update_offer.update.setEnabled(not self.update_page.running())
+        self.update_offer.show()
+
+    def dismiss_update_offer(self):
+        if self.update_page.release:
+            self.dismissed_updates.add(self.update_page.release["version"])
+        self.update_offer.hide()
+
+    def accept_update_offer(self):
+        if self.update_page.running() or not self.update_page.release:
+            return
+        if self.review.editor.active:
+            self.review.editor.leave(self.accept_update_offer)
+            return
+        self.dismiss_update_offer()
+        self.show_updates()
+        self.update_page.download_or_install()
 
     def show_updates(self):
         self.show_page(self.UPDATES)
 
     def auto_check_updates(self):
         import sys
-        import time
 
         if (
             not getattr(sys, "frozen", False)
             or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
         ):
             return
-        if self.busy() or self.close_requested or not self.update_page.auto.isChecked():
+        if (
+            self.startup_update_checked
+            or not self.isVisible()
+            or self.close_requested
+            or self.install_pending
+            or not self.update_page.auto.isChecked()
+        ):
             return
-        try:
-            checked = int(self.settings.value("update_checked_at", "0"))
-        except (ValueError, TypeError):
-            checked = 0
-        if time.time() - checked >= 86400:
-            self.update_page.check()
+        # One asynchronous request per launch, even after a recent check. A new
+        # release published today must be offered when the user reopens ColorPro.
+        self.startup_update_checked = True
+        self.update_page.check()
 
     def busy(self):
         return bool(
