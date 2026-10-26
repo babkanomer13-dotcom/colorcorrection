@@ -89,13 +89,13 @@ def test_export_beside_custom_collision_and_source_protection(tmp_path):
     pixels, meta, _ = read_image(a)
     original = Path(a.path).read_bytes()
     first = export_photo(a, pixels, meta, "PNG", "beside", "", [a.path, b.path])
-    assert Path(first["output"]) == tmp_path / "a/ColorPro/photo.png"
+    assert Path(first["output"]) == tmp_path / "a/ColorPro/photo_СС.png"
     second = export_photo(b, pixels, meta, "PNG", "beside", "")
-    assert Path(second["output"]) == tmp_path / "b/ColorPro/photo.png"
+    assert Path(second["output"]) == tmp_path / "b/ColorPro/photo_СС.png"
     custom = tmp_path / "shared"
     one = export_photo(a, pixels, meta, "PNG", "custom", str(custom))
     two = export_photo(b, pixels, meta, "PNG", "custom", str(custom))
-    assert Path(one["output"]).name == Path(two["output"]).name == "photo.png"
+    assert Path(one["output"]).name == Path(two["output"]).name == "photo_СС.png"
     assert Path(two["output"]).parent.name == "2"
     updated = export_photo(
         b, pixels + 1, meta, "PNG", "custom", str(custom), previous=two

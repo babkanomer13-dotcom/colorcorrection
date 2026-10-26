@@ -540,7 +540,7 @@ def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
     window.open_comparison()
     pump(app, lambda: window.compare.after is not None and not window.preview_loader.isRunning())
     output = Path(window.queue.results[0]["output"])
-    assert output.name == "Фото с пробелом.png"
+    assert output.name == "Фото с пробелом_СС.png"
     initial = output.read_bytes()
     editor = window.review.editor
     editor.begin()

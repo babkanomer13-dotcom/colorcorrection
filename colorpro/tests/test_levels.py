@@ -13,12 +13,12 @@ def test_short_result_names_and_collisions(tmp_path):
         path.parent.mkdir()
         Image.new("RGB", (20, 20), "gray").save(path)
         photos.append(collect_inputs([path])[0][0])
-    assert output_name(photos[0], "JPEG") == "IMG_2362_с.jpg"
-    assert output_name(photos[0], "PNG") == "IMG_2362_с.png"
+    assert output_name(photos[0], "JPEG") == "IMG_2362_СС.jpg"
+    assert output_name(photos[0], "PNG") == "IMG_2362_СС.png"
     first = output_path(tmp_path / "results", photos[0], "JPEG")
     first.write_bytes(b"do not overwrite")
     second = output_path(tmp_path / "results", photos[1], "JPEG")
-    assert first.name == second.name == "IMG_2362_с.jpg" and first.parent != second.parent
+    assert first.name == second.name == "IMG_2362_СС.jpg" and first.parent != second.parent
     assert first.read_bytes() == b"do not overwrite"
 
 

@@ -307,15 +307,21 @@ def read_image(item):
     return rgb, metadata, digest
 
 
-def output_name(item, fmt):
+def source_stem(item):
     forbidden = re.escape('<>:"/|?*' + chr(92))
     stem = re.sub("[" + forbidden + r"\x00-\x1f]", "_", Path(item.name).stem)
-    stem = stem.strip(" .")[:240] or "photo"
-    return f"{stem}_с.{'jpg' if fmt == 'JPEG' else 'png'}"
+    return stem.strip(" .")[:240] or "photo"
+
+
+def output_name(item, fmt):
+    stem = source_stem(item)
+    while stem.casefold().endswith("_сс"):
+        stem = stem[:-3]
+    return f"{stem}_СС.{'jpg' if fmt == 'JPEG' else 'png'}"
 
 
 def output_path(folder, item, fmt):
-    """Keep original_с names; identical basenames go into numbered subfolders."""
+    """Keep original_СС names; identical basenames go into numbered subfolders."""
     name = output_name(item, fmt)
     candidate = Path(folder) / name
     number = 1

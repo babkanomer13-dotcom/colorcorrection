@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from colorpro.files import output_name, save_result
+from colorpro.files import output_name, save_result, source_stem
 from colorpro.levels import digest
 from colorpro.safety import validate_output_parent
 
@@ -24,7 +24,7 @@ def export_folder(item, mode, custom):
 
 def export_name(item, fmt):
     safe = output_name(item, fmt)
-    stem = Path(safe).stem[:-2]
+    stem = Path(safe).stem
     suffix = Path(item.name).suffix
     if (fmt == "JPEG" and suffix.lower() in {".jpg", ".jpeg"}) or (
         fmt == "PNG" and suffix.lower() == ".png"
@@ -50,15 +50,21 @@ def export_photo(
     forbidden = {Path(p).resolve() for p in protected} | {Path(item.path).resolve()}
     target = folder / export_name(item, fmt)
     expected = None
+    owned = None
     if previous and previous.get("output") and previous.get("export_sha256"):
         old = Path(previous["output"])
         parents = old.parent.resolve()
         owned_folder = parents == folder or (
             parents.parent == folder and parents.name.isdigit()
         )
-        if owned_folder and old.name == target.name:
-            target, expected = old, previous["export_sha256"]
-    if expected is None:
+        legacy_names = {
+            source_stem(item) + target.suffix,
+            source_stem(item) + "_с" + Path(output_name(item, fmt)).suffix,
+        }
+        if owned_folder and old.name in legacy_names | {target.name}:
+            owned, expected = old, previous["export_sha256"]
+            target = old.with_name(target.name)
+    if target != owned:
         number = 1
         while target.exists() or target.resolve() in forbidden:
             number += 1
@@ -66,8 +72,11 @@ def export_photo(
     if target.is_symlink() or target.resolve() in forbidden:
         raise ValueError("Нельзя перезаписывать исходную фотографию")
     target.parent.mkdir(parents=True, exist_ok=True)
-    if expected and (not target.is_file() or digest(target) != expected):
-        raise ValueError("Результат изменён другой программой. Экспорт отменён.")
+    if owned is not None:
+        if owned.is_symlink() or owned.resolve() in forbidden:
+            raise ValueError("Нельзя перезаписывать исходную фотографию")
+        if not owned.is_file() or digest(owned) != expected:
+            raise ValueError("Результат изменён другой программой. Экспорт отменён.")
     with tempfile.TemporaryDirectory(
         prefix=".colorpro-export-", dir=target.parent
     ) as temp:
@@ -81,10 +90,19 @@ def export_photo(
         item.unchanged()
         if registry is not None:
             registry.remember_export(target, checksum)
-        if expected:
-            if digest(target) != expected or target.is_symlink():
+        if owned is not None:
+            if digest(owned) != expected or owned.is_symlink():
                 raise ValueError("Файл изменился во время экспорта")
-            os.replace(encoded, target)
+            # Migrate a verified export from an older version without leaving
+            # another image behind. Windows rename never replaces a collision.
+            if owned != target:
+                owned.rename(target)
+            try:
+                os.replace(encoded, target)
+            except OSError:
+                if owned != target:
+                    target.rename(owned)
+                raise
         else:
             encoded.rename(target)  # Windows refuses a racing/unowned destination.
     return {"output": str(target), "export_sha256": checksum}
