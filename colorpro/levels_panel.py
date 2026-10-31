@@ -1,6 +1,7 @@
 """Inline Levels editor. Full-resolution decode/save run outside the UI thread."""
 
 import copy
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QPointF, QSize, Qt, QThread, QTimer, Signal
@@ -132,6 +133,9 @@ class LevelsPanel(QWidget):
         self.dirty = False
         self.item = None
         self.saved_snapshot = None
+        self.exported_snapshot = None
+        self.controls_enabled = False
+        self.task_inflight = False
         self.save_task = None
         self.save_inflight = False
         self.save_pending = None
@@ -396,7 +400,7 @@ class LevelsPanel(QWidget):
         self.status.setObjectName("muted")
         self.status.setWordWrap(True)
         outer.addWidget(self.status)
-        self.save = QPushButton("Экспортировать фото")
+        self.save = QPushButton("Сохранить фото")
         self.save.setObjectName("primary")
         self.save.clicked.connect(self.save_result)
         outer.addWidget(self.save)
@@ -524,7 +528,12 @@ class LevelsPanel(QWidget):
         ):
             self.saved_snapshot = copy.deepcopy(value["current"])
             self.dirty = False
-            self.status.setText("Правки сохранены · экспорт — отдельной кнопкой")
+            if not self.running():
+                self.status.setText(
+                    "Правки сохранены. Фото обновится при переходе или по Ctrl+S."
+                    if self.export_dirty()
+                    else "Фото сохранено."
+                )
 
     def state_save_finished(self):
         self.save_inflight = False
@@ -553,25 +562,51 @@ class LevelsPanel(QWidget):
         if not self.state_idle():
             return
         if self.save_error:
-            self.departure = None
-            self.owner.requested_photo = None
-            self.owner.table.blockSignals(True)
-            self.owner.table.selectionModel().blockSignals(True)
-            self.owner.table.selectRow(self.index)
-            self.owner.table.selectionModel().blockSignals(False)
-            self.owner.table.blockSignals(False)
-            self.owner.sync_review()
+            self.stay_after_save_error()
             return
         # Controls can still change while a disk write is in progress.
         self.flush_state()
         if not self.state_idle():
             return
+        if self.export_dirty():
+            self.save_result()
+            return
         callback, self.departure = self.departure, None
         self.end(refresh=False, persist=False)
         callback()
 
+    def stay_after_save_error(self):
+        self.departure = None
+        self.owner.requested_photo = None
+        self.owner.close_requested = False
+        self.owner.table.blockSignals(True)
+        self.owner.table.selectionModel().blockSignals(True)
+        self.owner.table.selectRow(self.index)
+        self.owner.table.selectionModel().blockSignals(False)
+        self.owner.table.blockSignals(False)
+        self.owner.sync_review()
+
+    def export_dirty(self):
+        return self.session is not None and self.snapshot() != self.exported_snapshot
+
+    def update_save_button(self):
+        self.save.setEnabled(
+            self.controls_enabled and not self.running() and self.export_dirty()
+        )
+
+    @staticmethod
+    def record_snapshot(record):
+        return (
+            copy.deepcopy(record.get("manual_levels", defaults())),
+            dict(record.get("manual_brightness_contrast", tone_defaults())),
+            dict(record.get("manual_hsl", hsl_defaults())),
+            copy.deepcopy(record.get("manual_color_balance", balance_defaults())),
+        )
+
     def running(self):
-        return bool(self.task and self.task.isRunning())
+        # QThread can finish before its queued completion reaches the GUI.
+        # Keep the frame locked until that result has been acknowledged.
+        return self.task_inflight or bool(self.task and self.task.isRunning())
 
     def activate_tool(self, name):
         """Open a tool without resetting an existing, unsaved editing session."""
@@ -675,6 +710,7 @@ class LevelsPanel(QWidget):
         record = owner.queue.results.get(self.index, {})
         if not record.get("output"):
             return
+        self.exported_snapshot = self.record_snapshot(record)
         owner.face_choice.setCurrentIndex(0)
         self.active = True
         owner.edit_on_selection = True
@@ -707,9 +743,12 @@ class LevelsPanel(QWidget):
         self.task = LevelsTask(load)
         self.task.completed.connect(self.loaded)
         self.task.finished.connect(self.finish_load)
+        self.task_inflight = True
         self.task.start()
 
     def finish_load(self):
+        self.task_inflight = False
+        self.update_save_button()
         self.owner.sync_review()
         if self.departure is not None:
             self.pending_tool = None
@@ -744,12 +783,15 @@ class LevelsPanel(QWidget):
             self.owner.compare.set_zoom(view.get("zoom", 1))
         self.saved_snapshot = self.snapshot()
         self.dirty = False
-        self.status.setText("Правки сохраняются автоматически. Оригинал не изменяется.")
+        self.status.setText(
+            "Фото сохраняется при переходе к другому кадру или по Ctrl+S."
+        )
         self.set_controls_enabled(True)
         self.refresh_controls()
         self.render_preview()
 
     def set_controls_enabled(self, enabled):
+        self.controls_enabled = enabled
         for widget in (
             self.channel,
             self.preview,
@@ -768,6 +810,7 @@ class LevelsPanel(QWidget):
         for pair in self.control_pairs():
             for widget in pair:
                 widget.setEnabled(enabled)
+        self.update_save_button()
 
     def refresh_controls(self, *args):
         band = ("shadows", "midtones", "highlights")[self.balance_band.currentIndex()]
@@ -904,11 +947,16 @@ class LevelsPanel(QWidget):
         mode = self.auto_mode.currentIndex()
         self.task = LevelsTask(lambda: auto_settings(self.session.pixels, mode))
         self.task.completed.connect(self.auto_loaded)
-        self.task.finished.connect(self.finish_departure)
+        self.task.finished.connect(self.finish_auto)
+        self.task_inflight = True
         self.task.start()
 
-    def auto_loaded(self, result, error):
+    def finish_auto(self):
+        self.task_inflight = False
         self.set_controls_enabled(True)
+        self.finish_departure()
+
+    def auto_loaded(self, result, error):
         if error:
             self.status.setText(error)
             return
@@ -952,6 +1000,7 @@ class LevelsPanel(QWidget):
             return
         if self.snapshot() != self.saved_snapshot:
             self.dirty = True
+        self.update_save_button()
         # History can change even when Undo returns to the last saved pixels.
         # In particular, undoing while an older write is in flight must enqueue
         # the returned value too. flush_state deduplicates complete captures.
@@ -1079,12 +1128,18 @@ class LevelsPanel(QWidget):
             return
         if not self.flush_state():
             return
+        if not self.export_dirty():
+            return
         self.timer.stop()
         self.pick(None)
         snapshot = self.snapshot()
         item, session, index = self.item, self.session, self.index
         policy = self.owner.export_policy()
         previous = dict(self.owner.queue.results.get(index, {}))
+        # Manual corrections update this frame's existing result. Destination
+        # preferences apply to new processing, never silently relocate old photos.
+        suffix = Path(previous.get("output", "")).suffix.lower()
+        fmt = "JPEG" if suffix in {".jpg", ".jpeg"} else "PNG"
         self.set_controls_enabled(False)
         self.status.setText("Сохранение полного размера…")
 
@@ -1096,12 +1151,13 @@ class LevelsPanel(QWidget):
                 item,
                 pixels,
                 session.metadata,
-                policy["format"],
+                fmt,
                 policy["mode"],
                 policy["custom"],
                 policy["protected"],
                 previous,
                 registry=self.owner.workspace,
+                preserve_location=True,
             )
             data.update(
                 base_output=str(session.path),
@@ -1109,25 +1165,53 @@ class LevelsPanel(QWidget):
                 manual_brightness_contrast=snapshot[1],
                 manual_hsl=snapshot[2],
                 manual_color_balance=snapshot[3],
+                result_revision=int(previous.get("result_revision", 0)) + 1,
             )
-            return data
+            warning = ""
+            try:
+                self.owner.workspace.save_processed(
+                    item,
+                    dict(
+                        previous,
+                        **data,
+                        status="corrected",
+                        reason=None,
+                        manually_edited=True,
+                    ),
+                )
+            except (OSError, ValueError) as error:
+                warning = "Фото сохранено, но не удалось записать историю: " + str(
+                    error
+                )
+            return data, warning
 
         self.task = LevelsTask(export)
         self.task.completed.connect(self.saved)
         self.task.finished.connect(self.finish_save)
+        self.task_inflight = True
         self.task.start()
 
     def saved(self, data, error):
         self.save_success = not error
         if error:
-            self.status.setText(error)
+            self.status.setText("Не удалось сохранить фото: " + error)
+            self.owner.error(self.status.text())
             self.set_controls_enabled(True)
         else:
+            data, self.export_warning = data
+            # The image has committed. A later metadata/report warning must never
+            # make navigation encode the exact same image again.
+            self.exported_snapshot = self.record_snapshot(data)
             self.owner.manual_result_saved(self.index, data)
+            if self.export_warning:
+                self.owner.error(self.export_warning)
 
     def finish_save(self):
+        self.task_inflight = False
         if self.save_success:
-            self.status.setText("Фото экспортировано. Правки и история сохранены.")
+            self.status.setText(self.export_warning or "Фото сохранено.")
+        elif self.departure is not None:
+            self.stay_after_save_error()
         self.set_controls_enabled(True)
         self.finish_departure()
 

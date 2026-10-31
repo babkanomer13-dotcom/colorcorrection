@@ -130,7 +130,12 @@ def run_batch(
                     from colorpro.exporting import export_photo
                     from colorpro.workspace import Workspace
 
+                    workspace = Workspace(export_policy["workspace"])
+                    previous = workspace.processed_record(item)
                     record["base_output"] = str(result)
+                    record["result_revision"] = (
+                        int((previous or {}).get("result_revision", 0)) + 1
+                    )
                     record.update(
                         export_photo(
                             item,
@@ -140,7 +145,8 @@ def run_batch(
                             export_policy["mode"],
                             export_policy["custom"],
                             export_policy["protected"],
-                            registry=Workspace(export_policy["workspace"]),
+                            previous=previous,
+                            registry=workspace,
                         )
                     )
                 # UI receives bounded previews; no full-batch decoded images remain in RAM.

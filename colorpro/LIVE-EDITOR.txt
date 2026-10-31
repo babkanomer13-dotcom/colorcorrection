@@ -19,7 +19,18 @@ Only the latest matching acknowledgement marks the controls saved. Navigation an
 close wait asynchronously for the last write, including input made during a write.
 Failure keeps the editor open and retains the edits for retry. A return to the
 current frame cancels pending navigation. Atomic JSON replacement remains unchanged.
-No image is exported by autosave; explicit export still renders native resolution.
+The timed autosave writes only editor metadata. From 1.9.0, leaving a changed
+frame or Ctrl+S commits the full-size result once, as in RetushPro. The image
+commit point is tracked separately from saved metadata; a report warning never
+marks committed pixels dirty again. Unchanged navigation and repeated Save do
+not render or encode the image. A failed image write keeps the current editor.
+Result revisions recover a committed worker result if the queue was not written.
+
+New results go into ColorPro beside each source or inside a selected parent
+directory; an empty custom destination falls back to each source. Existing
+ColorPro directories are reused. Editing keeps each result's existing folder
+and format. Destination preferences apply to new processing. The _СС suffix is
+preserved, and processing the same source again reuses its verified owned result.
 On reopening comparison, saved tool controls and history resume automatically.
 The regular image loader already supported saved parameters; its preview work is
 now bounded and does not render a complete export merely to open a small preview.

@@ -11,14 +11,23 @@ from colorpro.levels import digest
 from colorpro.safety import validate_output_parent
 
 
+def resolve_output_mode(mode, custom):
+    return "beside" if mode == "custom" and not str(custom or "").strip() else mode
+
+
 def export_folder(item, mode, custom):
+    mode = resolve_output_mode(mode, custom)
     if mode not in {"beside", "custom"}:
         raise ValueError("Неизвестный режим сохранения")
     if mode == "custom":
-        return validate_output_parent(custom)
+        folder = validate_output_parent(str(custom).strip())
+        return folder if folder.name.casefold() == "colorpro" else folder / "ColorPro"
     parent = Path(item.path).resolve().parent
     # If an exported photo is deliberately opened, do not create ColorPro/ColorPro.
-    folder = parent if parent.name.casefold() == "colorpro" else parent / "ColorPro"
+    folder = next(
+        (p for p in (parent, *parent.parents) if p.name.casefold() == "colorpro"),
+        parent / "ColorPro",
+    )
     return validate_output_parent(folder)
 
 
@@ -43,9 +52,13 @@ def export_photo(
     protected=(),
     previous=None,
     registry=None,
+    preserve_location=False,
 ):
     item.unchanged()
-    folder = export_folder(item, mode, custom)
+    if preserve_location and previous and previous.get("export_sha256"):
+        folder = validate_output_parent(Path(previous["output"]).resolve().parent)
+    else:
+        folder = export_folder(item, mode, custom)
     folder.mkdir(parents=True, exist_ok=True)
     forbidden = {Path(p).resolve() for p in protected} | {Path(item.path).resolve()}
     target = folder / export_name(item, fmt)

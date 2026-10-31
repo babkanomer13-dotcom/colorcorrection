@@ -168,6 +168,14 @@ class Workspace:
             {"identity": identity(item), "record": record},
         )
 
+    def processed_record(self, item):
+        value = read_json(self.root / "records" / (identity(item) + ".json"))
+        if value is None:
+            return None
+        if value.get("identity") != identity(item):
+            raise ValueError("Результат относится к другому исходнику")
+        return value["record"]
+
     def load_queue(self):
         value = read_json(self.root / "queue.json")
         if value is None:
@@ -181,7 +189,11 @@ class Workspace:
             item = InputItem(**row["input"])
             record = dict(row["record"], index=index)
             completed = read_json(self.root / "records" / (identity(item) + ".json"))
-            if completed and not record.get("manually_edited"):
+            if completed and (
+                not record.get("manually_edited")
+                or completed["record"].get("result_revision", 0)
+                > record.get("result_revision", 0)
+            ):
                 if completed.get("identity") != identity(item):
                     raise ValueError("Результат относится к другому исходнику")
                 record = dict(completed["record"], index=index)

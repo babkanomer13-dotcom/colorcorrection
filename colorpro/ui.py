@@ -58,6 +58,7 @@ from colorpro.design import (
     icon_tile,
     stat_card,
 )
+from colorpro.exporting import resolve_output_mode
 from colorpro.files import EXTENSIONS, collect_inputs
 from colorpro.preview import ComparePage, PreviewWorker
 from colorpro.shortcuts import ShortcutManager
@@ -700,6 +701,7 @@ class Window(QMainWindow):
             self.close()
 
     def export_policy(self):
+        self.normalize_output_mode()
         return dict(
             mode=self.save_mode.currentData(),
             custom=self.output.text().strip(),
@@ -925,7 +927,7 @@ class Window(QMainWindow):
         save.addWidget(self.format)
         self.save_mode = combo_box()
         self.save_mode.addItem("Рядом с исходниками · папка ColorPro", "beside")
-        self.save_mode.addItem("Выбранная папка", "custom")
+        self.save_mode.addItem("Выбранная папка · внутри ColorPro", "custom")
         self.save_mode.setAccessibleName("Режим экспорта")
         saved_mode = self.save_mode.findData(
             self.settings.value("export_mode", "beside")
@@ -934,25 +936,25 @@ class Window(QMainWindow):
         self.save_mode.currentIndexChanged.connect(self.export_mode_changed)
         save.addWidget(self.save_mode)
         save.addSpacing(4)
-        save.addWidget(label("Папка результатов", "muted"))
+        save.addWidget(label("Папка для новых результатов", "muted"))
         row = QHBoxLayout()
-        self.output = QLineEdit(
-            str(
-                self.settings.value(
-                    "output", str(Path.home() / "Pictures" / "ColorPro")
-                )
-            )
-        )
+        self.output = QLineEdit(str(self.settings.value("output", "")))
         self.output.setAccessibleName("Папка результатов")
+        self.output.setPlaceholderText("Рядом с исходниками")
+        self.output.textChanged.connect(self.output_path_changed)
+        self.output.editingFinished.connect(self.normalize_output_mode)
         row.addWidget(self.output, 1)
         self.choose_output = button("Выбрать…", self.pick_output)
         row.addWidget(self.choose_output)
         save.addLayout(row)
+        self.output_hint = label("", "muted", True)
+        save.addWidget(self.output_hint)
+        self.normalize_output_mode()
         self.export_mode_changed()
         save.addWidget(
             label(
-                "Готовые фото — в подпапке ColorPro рядом с каждым исходником или в выбранном каталоге. "
-                "Правки редактора сохраняются отдельно и автоматически.",
+                "Папка и формат применяются к новым фотографиям. Ручные правки обновляют готовый файл. "
+                "Исходники остаются нетронутыми.",
                 "muted",
                 True,
             )
@@ -993,7 +995,8 @@ class Window(QMainWindow):
                 "Сравните и сохраните",
                 "Выберите кадр в ленте слева и инструмент сверху. Удерживайте Enter для исходника "
                 "и отпустите для результата. Правки и история сохраняются автоматически; "
-                "«Экспортировать фото» обновляет готовый файл. Исходник не меняется. "
+                "Готовый файл обновляется при смене кадра, закрытии редактора или по Ctrl+S. "
+                "Без новых правок повторной записи нет. Исходник не меняется. "
                 "Кнопка «Результаты» откроет папку с готовыми фотографиями.",
             ),
         ):
@@ -1187,15 +1190,44 @@ class Window(QMainWindow):
         self.settings.setValue("export_mode", mode)
         if hasattr(self, "output"):
             self.output.setEnabled(mode == "custom")
-            self.choose_output.setEnabled(mode == "custom")
+            self.choose_output.setEnabled(True)
+            self.refresh_output_hint()
+
+    def normalize_output_mode(self):
+        mode = resolve_output_mode(self.save_mode.currentData(), self.output.text())
+        self.save_mode.setCurrentIndex(self.save_mode.findData(mode))
+        self.settings.setValue("export_mode", mode)
+        self.settings.setValue("output", self.output.text().strip())
+        self.refresh_output_hint()
+
+    def output_path_changed(self, text):
+        self.settings.setValue("output", text.strip())
+        self.refresh_output_hint()
+
+    def refresh_output_hint(self):
+        if not hasattr(self, "output_hint"):
+            return
+        path = self.output.text().strip()
+        if resolve_output_mode(self.save_mode.currentData(), path) == "custom":
+            folder = Path(path)
+            if folder.name.casefold() != "colorpro":
+                folder /= "ColorPro"
+            self.output_hint.setText("Готовые фотографии: " + str(folder))
+        else:
+            self.output_hint.setText(
+                "Готовые фотографии — в папке ColorPro рядом с каждым исходником."
+            )
 
     def pick_output(self):
         path = QFileDialog.getExistingDirectory(
-            self, "Куда сохранять результаты", self.output.text()
+            self, "Выберите папку — внутри будет создана ColorPro", self.output.text()
         )
         if path:
             self.output.setText(path)
+            self.save_mode.setCurrentIndex(self.save_mode.findData("custom"))
             self.settings.setValue("output", path)
+            self.settings.setValue("export_mode", "custom")
+            self.settings.sync()
 
     def import_files(self, paths):
         if self.busy():
@@ -1386,9 +1418,7 @@ class Window(QMainWindow):
         if not indices:
             self.open_comparison()
             return
-        if self.save_mode.currentData() == "custom" and not self.output.text().strip():
-            self.error("Выберите папку для результатов")
-            return
+        self.normalize_output_mode()
         self.settings.setValue("output", self.output.text())
         for name, widget in (
             ("device_mode", self.device),
@@ -1766,7 +1796,7 @@ class Window(QMainWindow):
                 write_json(
                     Path(self.last_report["output"]) / "report.json", self.last_report
                 )
-            except OSError as error:
+            except (OSError, ValueError) as error:
                 self.error(
                     f"Фотография сохранена, но отчёт обновить не удалось: {error}"
                 )

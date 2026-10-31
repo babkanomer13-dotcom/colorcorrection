@@ -59,7 +59,7 @@ ACTIONS = (
     Action("decrease", "Уменьшить выбранный параметр", "value", "Down"),
     Action("increase_fast", "Увеличить выбранный параметр ×10", "value", "Shift+Up"),
     Action("decrease_fast", "Уменьшить выбранный параметр ×10", "value", "Shift+Down"),
-    Action("save", "Экспортировать фото", "editor", "Ctrl+S"),
+    Action("save", "Сохранить фото", "editor", "Ctrl+S"),
     Action("undo", "Отменить правку", "editor", "Ctrl+Z"),
     Action("step_back", "Шаг назад по истории правок", "editor", "Ctrl+Alt+Z"),
     Action("redo", "Повторить правку", "editor", "Ctrl+Shift+Z"),

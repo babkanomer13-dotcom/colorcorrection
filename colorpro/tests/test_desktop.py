@@ -556,7 +556,8 @@ def test_inline_levels_preview_cancel_and_save(app, photo, tmp_path):
     assert output.read_bytes() == initial
     editor.cancel_edit()
     pump(app, lambda: not editor.active and not window.preview_loader.isRunning())
-    assert not window.busy() and output.read_bytes() == initial
+    assert not window.busy() and output.read_bytes() != initial
+    assert source.read_bytes() == original
     editor.begin()
     pump(app, lambda: editor.session is not None and not editor.running())
     editor.channel.setCurrentIndex(1)

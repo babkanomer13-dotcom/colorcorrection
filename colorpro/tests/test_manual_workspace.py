@@ -330,5 +330,6 @@ def test_async_preview_latest_wins_and_cancel_discards_result(
         release.set()
         pump(lambda: not editor.preview_running())
         if editor.active:
-            editor.end()
+            # This preview-only fixture has no image/base/record to persist.
+            editor.end(persist=False)
         owner.close()
