@@ -31,6 +31,8 @@ def pump(app, predicate):
 def workspace(app, tmp_path):
     settings = QSettings(str(tmp_path / "keys.ini"), QSettings.Format.IniFormat)
     settings.setValue("auto_update", False)
+    # Exercise direct keyboard opening from a deliberately collapsed panel.
+    settings.setValue("parameters_visible", False)
     owner = Window(settings=settings)
     source, result = tmp_path / "исходник.png", tmp_path / "исходник_с.png"
     Image.new("RGB", (50, 60), (70, 100, 130)).save(source)

@@ -1,5 +1,5 @@
-ColorPro 1.8.0 — live editor
-==========================
+ColorPro — live editor
+======================
 
 Causes corrected
 ----------------
@@ -31,21 +31,31 @@ directory; an empty custom destination falls back to each source. Existing
 ColorPro directories are reused. Editing keeps each result's existing folder
 and format. Destination preferences apply to new processing. The _СС suffix is
 preserved, and processing the same source again reuses its verified owned result.
-On reopening comparison, saved tool controls and history resume automatically.
+The parameters panel opens automatically with processed photos, including their
+first edit. Manually hiding it is remembered; photos without results do not start
+an editor. On reopening comparison, saved controls and history resume automatically.
 The regular image loader already supported saved parameters; its preview work is
 now bounded and does not render a complete export merely to open a small preview.
 
 Preview and comparison
 ----------------------
-One render worker with one newest request: cheap frames continue during dragging,
-in order, without accumulating outdated requests. A 640 px proxy is used for input
-feedback; 120 ms idle or slider release refines the 1200 px proxy. At native zoom
-only the visible native pixel region is refined, using the exact export operators.
-Obsolete expensive work checks cancellation between HSL chunks. QImage owns its
+From 1.9.1, drag and idle use the same display-resolution input. The previous
+640 px drag proxy and 120 ms refinement caused visible blur/sharpness jumps.
+The visible crop is now taken from native pixels and downsampled only to its
+physical display size (including device pixel ratio), never enlarged from 640 px.
+At 100% and above it uses native pixels. The previous sharp frame remains visible
+until the new one is ready. Releasing a slider does not trigger another render.
+
+One worker and one newest request prevent a backlog. Cropping/resizing is cached
+per viewport and performed off the GUI thread; parameter changes reuse that input.
+Pan/zoom/resize invalidate old geometry, checked between pixel operations and HSL
+chunks. RGB lookup uses OpenCV's integer LUT with the same verified channel tables
+as export, checked byte-for-byte against the original operator. QImage owns its
 RGB bytes across threads; QPixmap is created only in the GUI thread. No PNG round
 trip per edit. An unchanged LUT stage is reused for HSL-only adjustments. Verified
-tables are warmed during session loading. Proxy downsampling is for display only;
-native crop and full-size export use the unchanged CC2014 RGB8 formulas.
+tables and the lookup backend are warmed during background session loading.
+Downsampling is for display only; native crops and full-size export retain the
+unchanged CC2014 RGB8 formulas. Autosave is independent of preview completion.
 
 The existing common zoom/center synchronizes both panes. Labels now explicitly
 offer 1 photo / 2 photos, with the divider retained; the mode is persisted.

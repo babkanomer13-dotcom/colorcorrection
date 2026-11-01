@@ -1091,7 +1091,8 @@ class Window(QMainWindow):
             "output"
         ):
             if (
-                self.edit_on_selection
+                self.review.panel_toggle.isChecked()
+                or self.edit_on_selection
                 or self.workspace.edit_path(self.queue.items[index]).is_file()
             ):
                 self.review.editor.begin(tool="resume")
@@ -1608,7 +1609,9 @@ class Window(QMainWindow):
             return
         item = self.queue.items[index]
         resume_edit = self.pages.currentIndex() == self.COMPARE and (
-            self.edit_on_selection or self.workspace.edit_path(item).is_file()
+            self.review.panel_toggle.isChecked()
+            or self.edit_on_selection
+            or self.workspace.edit_path(item).is_file()
         )
         self.queue_timer.start()
         self.sync_review()
@@ -1752,7 +1755,8 @@ class Window(QMainWindow):
                 and self.preview_pending is None
             ):
                 tool, editor.pending_tool = editor.pending_tool, None
-                editor.begin(tool)
+                if self.pages.currentIndex() == self.COMPARE:
+                    editor.begin(tool)
 
     def preview_loaded(self, key, before, after, error):
         if key != self.preview_key:

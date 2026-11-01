@@ -229,7 +229,7 @@ def test_ui_import_process_compare_and_remove(app, photo, tmp_path):
     assert window.worker.args[2] == "v39"
     for page in (1, 2, 3, 4, 0):
         QTest.mouseClick(window.nav_buttons[page], Qt.MouseButton.LeftButton)
-        app.processEvents()
+        pump(app, lambda page=page: window.pages.currentIndex() == page)
         assert window.pages.currentIndex() == page
         assert len(window.queue.items) == 1 and window.compare.after is not None
     assert window.open_folder.isEnabled() and window.expand.isEnabled()

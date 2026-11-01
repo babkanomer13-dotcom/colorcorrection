@@ -248,6 +248,23 @@ class CompareView(QWidget):
         )
         painter.drawPixmap(detail, pixmap, QRectF(pixmap.rect()))
 
+    def preview_spec(self, shape):
+        """Render visible native pixels, downsampling only to physical display size."""
+        import math
+
+        height, width = shape[:2]
+        if self.before is None:
+            return (0, 0, width, height), (width, height)
+        region = self.visible_region(shape)
+        x0, y0, x1, y1 = region
+        drawn_width, drawn_height = self.drawn_size()
+        ratio = self.devicePixelRatioF()
+        size = (
+            max(1, min(x1 - x0, math.ceil((x1 - x0) * drawn_width / width * ratio))),
+            max(1, min(y1 - y0, math.ceil((y1 - y0) * drawn_height / height * ratio))),
+        )
+        return region, size
+
     def actual_size(self):
         if self.before is None:
             return

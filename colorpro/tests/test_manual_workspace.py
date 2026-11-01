@@ -115,7 +115,6 @@ def test_save_hotkey_commits_focused_numeric_value(app, tmp_path, monkeypatch):
     finally:
         editor.active = False
         editor.session = None
-        editor.timer.stop()
         owner.close()
 
 

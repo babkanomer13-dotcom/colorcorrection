@@ -148,7 +148,6 @@ class LevelsPanel(QWidget):
         self.preview_job_revision = 0
         self.preview_pending = False
         self.preview_epoch = 0
-        self.preview_refine = False
         self.preview_renderer = PreviewRenderer()
         self.pick_kind = None
         self.settings = defaults()
@@ -412,10 +411,6 @@ class LevelsPanel(QWidget):
         self.key_help.setObjectName("muted")
         self.key_help.setWordWrap(True)
         layout.addWidget(self.key_help)
-        self.timer = QTimer(self)
-        self.timer.setSingleShot(True)
-        self.timer.setInterval(120)
-        self.timer.timeout.connect(self.refine_preview)
         self.autosave = QTimer(self)
         self.autosave.setSingleShot(True)
         self.autosave.setInterval(350)
@@ -546,9 +541,7 @@ class LevelsPanel(QWidget):
     def leave(self, callback):
         self.departure = callback
         self.flush_state()
-        self.timer.stop()
         self.preview_pending = False
-        self.preview_refine = False
         self.preview_revision += 1
         self.preview_epoch += 1
         if self.running() or self.preview_running():
@@ -875,7 +868,6 @@ class LevelsPanel(QWidget):
 
     def end_gesture(self):
         self.group_change = self.group_recorded = False
-        self.refine_preview()
 
     def undo_edit(self):
         if self.running() or not self.history:
@@ -1008,55 +1000,33 @@ class LevelsPanel(QWidget):
             self.autosave.start()
         self.preview_revision += 1
         self.preview_pending = True
-        self.preview_refine = False
-        self.owner.compare.after_detail = None
-        self.timer.start()
+        # Keep the previous sharp frame until its replacement is ready.
+        # Never fall back to an enlarged low-resolution proxy while dragging.
         self.start_preview()
 
     def viewport_changed(self):
         if self.active and self.session is not None:
-            self.preview_revision += 1
-            self.owner.compare.after_detail = None
-            self.timer.start()
-            if not self.autosave.isActive():
-                self.autosave.start()
-
-    def refine_preview(self):
-        self.timer.stop()
-        if self.active and self.session is not None and self.departure is None:
-            self.preview_refine = True
-            self.start_preview()
+            self.preview_epoch += 1
+            self.render_preview()
 
     def preview_running(self):
         # A finished thread may still have queued result/finished signals.
         return self.preview_inflight
 
     def preview_idle(self):
-        return (
-            not self.preview_running()
-            and not self.preview_pending
-            and not self.preview_refine
-            and not self.timer.isActive()
-        )
+        return not self.preview_running() and not self.preview_pending
 
     def start_preview(self):
         if (
             not self.active
             or self.session is None
-            or not (self.preview_pending or self.preview_refine)
+            or self.departure is not None
+            or not self.preview_pending
             or self.preview_running()
         ):
             return
-        quick = self.preview_pending
-        region = None
-        if quick:
-            pixels = getattr(self.session, "quick_preview", self.session.preview)
-        else:
-            pixels = self.session.preview
-            if self.owner.compare.high_detail:
-                region = self.owner.compare.visible_region(self.session.pixels.shape)
-                x0, y0, x1, y1 = region
-                pixels = self.session.pixels[y0:y1, x0:x1]
+        pixels = getattr(self.session, "pixels", self.session.preview)
+        region, size = self.owner.compare.preview_spec(pixels.shape)
         snapshot = self.snapshot()
         enabled = self.preview.isChecked()
         revision = self.preview_revision
@@ -1064,25 +1034,20 @@ class LevelsPanel(QWidget):
         renderer = self.preview_renderer
         self.preview_job_revision = revision
         self.preview_pending = False
-        if not quick:
-            self.preview_refine = False
 
         def render():
-            # Cheap frames finish during continuous dragging. Expensive detail
-            # work is cancelled between pixel chunks as soon as input changes.
+            cancelled = lambda: epoch != self.preview_epoch
             try:
+                visible = renderer.viewport(pixels, region, size, cancelled)
                 data = renderer.render(
-                    pixels,
+                    visible,
                     snapshot,
                     enabled,
-                    lambda: (
-                        epoch != self.preview_epoch
-                        or (not quick and revision != self.preview_revision)
-                    ),
+                    cancelled,
                 )
             except PreviewCancelled:
                 return None
-            return epoch, revision, quick, region, data
+            return epoch, revision, region, data
 
         self.preview_task = LevelsTask(render)
         self.preview_task.completed.connect(self.preview_loaded)
@@ -1099,15 +1064,14 @@ class LevelsPanel(QWidget):
             return
         if result is None:
             return
-        epoch, revision, quick, region, data = result
-        if epoch != self.preview_epoch or (
-            not quick and revision != self.preview_revision
-        ):
+        epoch, _revision, region, data = result
+        if epoch != self.preview_epoch:
             return
-        # There is one renderer: presented quick frames are always monotonic,
-        # even when a newer request is waiting. No obsolete backlog is retained.
+        # One renderer plus the latest pending input: no backlog or quality jump.
         pixmap = QPixmap.fromImage(data)
-        if region is None:
+        pixels = getattr(self.session, "pixels", self.session.preview)
+        height, width = pixels.shape[:2]
+        if region == (0, 0, width, height):
             self.owner.compare.after = pixmap
             self.owner.compare.after_detail = None
         else:
@@ -1130,7 +1094,6 @@ class LevelsPanel(QWidget):
             return
         if not self.export_dirty():
             return
-        self.timer.stop()
         self.pick(None)
         snapshot = self.snapshot()
         item, session, index = self.item, self.session, self.index
@@ -1226,7 +1189,6 @@ class LevelsPanel(QWidget):
             self.leave(self.owner.sync_review)
             return
         self.pick(None)
-        self.timer.stop()
         self.autosave.stop()
         self.active = False
         self.departure = None
@@ -1234,7 +1196,6 @@ class LevelsPanel(QWidget):
         self.preview_revision += 1
         self.preview_epoch += 1
         self.preview_pending = False
-        self.preview_refine = False
         self.session = None
         self.hide()
         owner = self.owner

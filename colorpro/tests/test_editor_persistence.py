@@ -156,7 +156,7 @@ def desktop(app, tmp_path):
     owner.show()
     owner.show_page(owner.COMPARE)
     owner.select_photo(0)
-    pump(app, lambda: owner.review.levels_button.isEnabled())
+    begin(app, owner)
     yield owner
     editor = owner.review.editor
     pump(app, lambda: not editor.running())
@@ -177,7 +177,10 @@ def begin(app, owner):
             ),
         )
         return owner.review.editor
-    pump(app, lambda: owner.review.levels_button.isEnabled())
+    pump(
+        app,
+        lambda: owner.review.editor.active or owner.review.levels_button.isEnabled(),
+    )
     owner.review.editor.begin()
     try:
         pump(
@@ -409,6 +412,8 @@ def test_pending_batch_preserves_finished_records(app, desktop):
     from colorpro.tests.test_desktop import FakeEngine
 
     owner = desktop
+    owner.show_page(owner.PHOTOS)
+    pump(app, lambda: not owner.busy())
     owner.engine_factory = FakeEngine
     previous = dict(owner.queue.results[0])
     owner.queue.update(1, {"status": "error"})
@@ -496,6 +501,8 @@ def test_large_queue_and_bounded_caches(app, desktop, tmp_path):
     from dataclasses import replace
 
     owner = desktop
+    owner.show_page(owner.PHOTOS)
+    pump(app, lambda: not owner.busy())
     item = photo(tmp_path / "large")
     items = [replace(item, member=f"frame_{i:05d}.png") for i in range(10000)]
     owner.workspace.save_queue(items, {}, 9999)
