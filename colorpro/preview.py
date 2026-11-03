@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -15,7 +16,9 @@ from PySide6.QtWidgets import (
 
 from colorpro.editor_render import rgb_image
 from colorpro.files import collect_inputs, preview_bytes, read_image
+from colorpro.levels import uses_original
 from colorpro.levels_panel import LevelsPanel
+from colorpro.photo_report import processing_report
 from colorpro.widgets import combo_box, navigation_icon
 
 
@@ -81,6 +84,14 @@ class PreviewWorker(QThread):
                 pixels, _, base_sha = read_image(items[0])
                 if pixels.shape != shape:
                     raise ValueError("Размер результата отличается от исходника")
+                saved = (
+                    self.workspace.load_edit(self.item, self.output, base_sha)
+                    if self.workspace is not None
+                    else None
+                )
+                if saved and uses_original(saved["current"]):
+                    # Keep source decoding in the worker, including ZIP members.
+                    pixels, _, _ = read_image(self.item)
                 if region:
                     pixels = pixels[y0:y1, x0:x1]
                 if not self.full:
@@ -93,19 +104,17 @@ class PreviewWorker(QThread):
                     image.thumbnail((1500, 1500))
                     pixels = np.array(image)
                     image.close()
-                if self.workspace is not None:
-                    saved = self.workspace.load_edit(self.item, self.output, base_sha)
-                    if saved:
-                        from colorcorrection.levels_operator import apply_rgb_lut
+                if saved:
+                    from colorcorrection.levels_operator import apply_rgb_lut
 
-                        from colorpro.manual_hsl import apply_hsl
-                        from colorpro.manual_tone import combined_lut
+                    from colorpro.manual_hsl import apply_hsl
+                    from colorpro.manual_tone import combined_lut
 
-                        levels, tone, hsl, balance = saved["current"]
-                        pixels = apply_hsl(
-                            apply_rgb_lut(pixels, combined_lut(levels, tone, balance)),
-                            hsl,
-                        )
+                    levels, tone, hsl, balance = saved["current"][:4]
+                    pixels = apply_hsl(
+                        apply_rgb_lut(pixels, combined_lut(levels, tone, balance)),
+                        hsl,
+                    )
                 after = encode(pixels)
         except Exception as exc:  # noqa: BLE001 -- worker reports failures to the UI
             error = str(exc)
@@ -492,6 +501,13 @@ class ComparePage(QWidget):
         self.levels_button.setEnabled(False)
         self.levels_button.clicked.connect(lambda: self.editor.begin())
         heading.addWidget(self.levels_button)
+        self.original_button = QPushButton("К исходнику")
+        self.original_button.setIcon(navigation_icon("undo", "#585b84"))
+        self.original_button.setToolTip(
+            "Убрать V39 и все ручные правки только у текущего фото. Можно отменить через Ctrl+Z."
+        )
+        self.original_button.clicked.connect(lambda: self.editor.reset_original())
+        heading.addWidget(self.original_button)
         self.open_file = QPushButton("Открыть результат")
         self.open_file.setIcon(navigation_icon("open", "#585b84"))
         self.open_file.setEnabled(False)
@@ -574,6 +590,25 @@ class ComparePage(QWidget):
         self.compare_toggle.clicked.connect(lambda: self.view.toggle_original())
         self.tools.addWidget(self.compare_toggle)
         layout.addLayout(self.tools)
+        self.report_card = QFrame()
+        self.report_card.setObjectName("notice")
+        report_layout = QVBoxLayout(self.report_card)
+        report_layout.setContentsMargins(12, 8, 12, 8)
+        report_layout.setSpacing(2)
+        self.report_title = QLabel()
+        self.report_title.setObjectName("section")
+        self.report_detail = QLabel()
+        self.report_note = QLabel()
+        for label in (self.report_title, self.report_detail, self.report_note):
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            report_layout.addWidget(label)
+        self.report_detail.setObjectName("muted")
+        self.report_note.setObjectName("muted")
+        self.report_note.setMinimumHeight(16)
+        self.report_card.hide()
+        layout.addWidget(self.report_card)
         self.view = CompareView()
         self.view.native_requested.connect(owner.request_native_detail)
         mode = str(owner.settings.value("comparison_mode", "2"))
@@ -695,6 +730,16 @@ class ComparePage(QWidget):
         loading = bool(owner.preview_loader and owner.preview_loader.isRunning())
         output = owner.queue.results.get(index, {}).get("output")
         self.levels_button.setEnabled(bool(output) and not owner.busy() and not loading)
+        self.original_button.setEnabled(
+            (
+                editing
+                and self.editor.controls_enabled
+                and not self.editor.running()
+                and self.editor.departure is None
+            )
+            or self.levels_button.isEnabled()
+        )
+        self.sync_report()
         for control in self.tool_buttons.values():
             control.setEnabled(
                 (
@@ -710,3 +755,25 @@ class ComparePage(QWidget):
                 self.open_file,
             ):
                 control.setEnabled(False)
+
+    def sync_report(self):
+        editor = self.editor
+        index = editor.index if editor.active else self.owner.table.currentIndex().row()
+        record = self.owner.queue.results.get(index, {})
+        self.report_card.setVisible(bool(record.get("output")))
+        if not record.get("output"):
+            return
+        snapshot = (
+            editor.snapshot()
+            if editor.active and editor.session is not None
+            else editor.record_snapshot(record)
+        )
+        text = processing_report(
+            record, uses_original(snapshot), snapshot[:4] != editor.record_snapshot({})
+        )
+        for label, value in zip(
+            (self.report_title, self.report_detail, self.report_note), text
+        ):
+            if label.text() != value:
+                label.setText(value)
+        # Reserve the status line so the photo does not resize on the first edit.

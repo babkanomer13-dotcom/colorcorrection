@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from colorpro.files import collect_inputs, read_image, save_result
+from colorpro.files import InputItem, collect_inputs, read_image, save_result
 from colorpro.safety import validate_output_parent
 
 
@@ -18,6 +18,10 @@ def defaults():
     from colorcorrection.levels_operator import Levels
 
     return [asdict(Levels()) for _ in range(4)]
+
+
+def uses_original(snapshot):
+    return len(snapshot) == 5 and snapshot[4] == "original"
 
 
 def levels_lut(settings):
@@ -92,8 +96,11 @@ class LevelsSession:
                 "Результат заменён символической ссылкой; сохранение запрещено"
             )
         self.path = Path(output).resolve()
-        if self.path == Path(source).resolve():
+        source_path = source.path if isinstance(source, InputItem) else source
+        if self.path == Path(source_path).resolve():
             raise ValueError("Нельзя редактировать исходник вместо результата")
+        self.source = source
+        self.original_pixels = self.original_histogram = self.original_metadata = None
         validate_output_parent(self.path.parent)
         items, errors = collect_inputs([self.path])
         if errors or len(items) != 1:
@@ -117,14 +124,46 @@ class LevelsSession:
         apply_rgb_lut(self.preview[:1, :1], combined_lut(defaults(), None, None))
         self.format = "JPEG" if self.path.suffix.lower() in {".jpg", ".jpeg"} else "PNG"
 
+    def prepare_original(self):
+        """Decode once in a worker; keep the immutable V39 base for Undo."""
+        if self.original_pixels is not None:
+            return
+        if isinstance(self.source, InputItem):
+            item = self.source
+        else:
+            items, errors = collect_inputs([self.source])
+            if errors or len(items) != 1:
+                raise ValueError("Не удалось открыть исходник")
+            item = items[0]
+        pixels, metadata, _ = read_image(item)
+        if pixels.shape != self.pixels.shape:
+            raise ValueError("Размер исходника отличается от результата")
+        values = histogram(pixels)
+        pixels.flags.writeable = False
+        self.original_metadata, self.original_histogram = metadata, values
+        self.original_pixels = pixels
+
+    def pixels_for(self, snapshot):
+        if uses_original(snapshot):
+            if self.original_pixels is None:
+                raise ValueError("Исходник ещё не загружен")
+            return self.original_pixels
+        return self.pixels
+
+    def metadata_for(self, snapshot):
+        return self.original_metadata if uses_original(snapshot) else self.metadata
+
     def render(self, snapshot):
         from colorcorrection.levels_operator import apply_rgb_lut
         from colorpro.manual_tone import combined_lut
         from colorpro.manual_hsl import apply_hsl
 
-        levels, tone, hsl, balance = snapshot
+        levels, tone, hsl, balance = snapshot[:4]
         return apply_hsl(
-            apply_rgb_lut(self.pixels, combined_lut(levels, tone, balance)), hsl
+            apply_rgb_lut(
+                self.pixels_for(snapshot), combined_lut(levels, tone, balance)
+            ),
+            hsl,
         )
 
     def save(self, settings, tone=None, hsl=None, balance=None):

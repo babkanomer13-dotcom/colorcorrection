@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from colorpro.editor_render import PreviewCancelled, PreviewRenderer
-from colorpro.levels import LevelsSession, defaults, picked_levels
+from colorpro.levels import LevelsSession, defaults, picked_levels, uses_original
 from colorpro.manual_balance import balance_defaults
 from colorpro.manual_hsl import hsl_available, hsl_defaults
 from colorpro.manual_tone import tone_available, tone_defaults
@@ -151,6 +151,7 @@ class LevelsPanel(QWidget):
         self.preview_renderer = PreviewRenderer()
         self.pick_kind = None
         self.settings = defaults()
+        self.use_original = False
         self.tone = tone_defaults()
         self.hsl = hsl_defaults()
         self.balance = balance_defaults()
@@ -356,7 +357,8 @@ class LevelsPanel(QWidget):
                 hsl_layout.addWidget(slider)
                 self.hsl_controls[name] = (spin, slider)
         row = QHBoxLayout()
-        self.reset = QPushButton("Сбросить")
+        self.reset = QPushButton("Сбросить правки")
+        self.reset.setToolTip("Сбросить только ручные параметры текущего фото")
         self.reset.clicked.connect(self.reset_all)
         row.addWidget(self.reset)
         self.preview = QCheckBox("Просмотр")
@@ -446,12 +448,20 @@ class LevelsPanel(QWidget):
         )
 
     def snapshot(self):
-        return (
+        value = (
             copy.deepcopy(self.settings),
             dict(self.tone),
             dict(self.hsl),
             copy.deepcopy(self.balance),
         )
+        return value + ("original",) if self.use_original else value
+
+    def restore_snapshot(self, value):
+        self.settings, self.tone, self.hsl, self.balance = copy.deepcopy(value[:4])
+        original = uses_original(value)
+        if self.use_original != original:
+            self.preview_epoch += 1
+        self.use_original = original
 
     def flush_state(self):
         """Capture an immutable request; disk I/O never runs in an input handler.
@@ -589,12 +599,13 @@ class LevelsPanel(QWidget):
 
     @staticmethod
     def record_snapshot(record):
-        return (
+        value = (
             copy.deepcopy(record.get("manual_levels", defaults())),
             dict(record.get("manual_brightness_contrast", tone_defaults())),
             dict(record.get("manual_hsl", hsl_defaults())),
             copy.deepcopy(record.get("manual_color_balance", balance_defaults())),
         )
+        return value + ("original",) if record.get("edit_base") == "original" else value
 
     def running(self):
         # QThread can finish before its queued completion reaches the GUI.
@@ -607,6 +618,9 @@ class LevelsPanel(QWidget):
             self.begin(tool=name)
             return
         if self.running() or self.session is None:
+            return
+        if name == "original":
+            self.reset_original()
             return
         if name == "resume":
             self.setVisible(self.owner.review.panel_toggle.isChecked())
@@ -709,6 +723,7 @@ class LevelsPanel(QWidget):
         owner.edit_on_selection = True
         self.pending_tool = tool
         self.settings = defaults()
+        self.use_original = False
         self.tone = tone_defaults()
         self.hsl = hsl_defaults()
         self.balance = balance_defaults()
@@ -727,10 +742,18 @@ class LevelsPanel(QWidget):
         self.set_controls_enabled(False)
         item = self.item
         base = record.get("base_output") or record["output"]
+        exported = self.exported_snapshot
 
         def load():
-            session = LevelsSession(base, item.path)
+            session = LevelsSession(base, item)
             saved = owner.workspace.load_edit(item, base, session.sha)
+            snapshots = (
+                [saved["current"], *saved["history"], *saved["future"]]
+                if saved
+                else [exported]
+            )
+            if any(uses_original(row) for row in snapshots):
+                session.prepare_original()
             return session, saved
 
         self.task = LevelsTask(load)
@@ -764,9 +787,7 @@ class LevelsPanel(QWidget):
             self.session.pixels.shape[0],
         )
         if saved:
-            self.settings, self.tone, self.hsl, self.balance = copy.deepcopy(
-                saved["current"]
-            )
+            self.restore_snapshot(saved["current"])
             self.history = saved["history"]
             self.future = saved["future"]
             view = saved.get("view", {})
@@ -774,6 +795,8 @@ class LevelsPanel(QWidget):
             if isinstance(center, list) and len(center) == 2:
                 self.owner.compare.center = QPointF(*center)
             self.owner.compare.set_zoom(view.get("zoom", 1))
+        else:
+            self.restore_snapshot(self.exported_snapshot)
         self.saved_snapshot = self.snapshot()
         self.dirty = False
         self.status.setText(
@@ -804,6 +827,7 @@ class LevelsPanel(QWidget):
             for widget in pair:
                 widget.setEnabled(enabled)
         self.update_save_button()
+        self.owner.sync_review()
 
     def refresh_controls(self, *args):
         band = ("shadows", "midtones", "highlights")[self.balance_band.currentIndex()]
@@ -845,10 +869,13 @@ class LevelsPanel(QWidget):
             spin.blockSignals(False)
             slider.blockSignals(False)
         if self.session is not None:
+            values = (
+                self.session.original_histogram
+                if self.use_original
+                else self.session.histogram
+            )
             self.histogram.values = (
-                self.session.histogram.sum(axis=0)
-                if index == 0
-                else self.session.histogram[index - 1]
+                values.sum(axis=0) if index == 0 else values[index - 1]
             )
             self.histogram.color = ("#56526d", "#d96676", "#46a584", "#6986db")[index]
             self.histogram.update()
@@ -873,7 +900,7 @@ class LevelsPanel(QWidget):
         if self.running() or not self.history:
             return
         self.future.append(self.snapshot())
-        self.settings, self.tone, self.hsl, self.balance = self.history.pop()
+        self.restore_snapshot(self.history.pop())
         self.refresh_controls()
         self.render_preview()
 
@@ -881,7 +908,7 @@ class LevelsPanel(QWidget):
         if self.running() or not self.future:
             return
         self.history.append(self.snapshot())
-        self.settings, self.tone, self.hsl, self.balance = self.future.pop()
+        self.restore_snapshot(self.future.pop())
         self.refresh_controls()
         self.render_preview()
 
@@ -928,6 +955,45 @@ class LevelsPanel(QWidget):
         self.refresh_controls()
         self.render_preview()
 
+    def reset_original(self):
+        if not self.active:
+            self.begin(tool="original")
+            return
+        if self.running() or self.session is None or self.departure is not None:
+            return
+        if self.use_original and self.snapshot()[:4] == self.record_snapshot({}):
+            return
+        self.pick(None)
+        self.set_controls_enabled(False)
+        self.status.setText("Открываем исходник…")
+        self.task = LevelsTask(self.session.prepare_original)
+        self.task.completed.connect(self.original_loaded)
+        self.task.finished.connect(self.finish_original)
+        self.task_inflight = True
+        self.task.start()
+        self.owner.sync_review()
+
+    def original_loaded(self, result, error):
+        if error:
+            self.status.setText("Не удалось восстановить исходник: " + error)
+            self.owner.error(self.status.text())
+            return
+        self.end_gesture()
+        self.remember()
+        self.restore_snapshot((*self.record_snapshot({}), "original"))
+        self.preview_epoch += 1
+        self.preview.blockSignals(True)
+        self.preview.setChecked(True)
+        self.preview.blockSignals(False)
+        self.refresh_controls()
+        self.render_preview()
+        self.status.setText("Восстановлен исходник. Сброс можно отменить через Ctrl+Z.")
+
+    def finish_original(self):
+        self.task_inflight = False
+        self.set_controls_enabled(True)
+        self.finish_departure()
+
     def auto_levels(self):
         if self.running() or self.session is None:
             return
@@ -937,7 +1003,8 @@ class LevelsPanel(QWidget):
         self.set_controls_enabled(False)
         self.status.setText("Подбор параметров…")
         mode = self.auto_mode.currentIndex()
-        self.task = LevelsTask(lambda: auto_settings(self.session.pixels, mode))
+        pixels = self.session.pixels_for(self.snapshot())
+        self.task = LevelsTask(lambda: auto_settings(pixels, mode))
         self.task.completed.connect(self.auto_loaded)
         self.task.finished.connect(self.finish_auto)
         self.task_inflight = True
@@ -975,7 +1042,7 @@ class LevelsPanel(QWidget):
     def picked(self, x, y):
         if self.session is None or self.pick_kind is None:
             return
-        pixels = self.session.pixels
+        pixels = self.session.pixels_for(self.snapshot())
         value = pixels[
             min(pixels.shape[0] - 1, int(y * pixels.shape[0])),
             min(pixels.shape[1] - 1, int(x * pixels.shape[1])),
@@ -993,6 +1060,7 @@ class LevelsPanel(QWidget):
         if self.snapshot() != self.saved_snapshot:
             self.dirty = True
         self.update_save_button()
+        self.owner.review.sync_report()
         # History can change even when Undo returns to the last saved pixels.
         # In particular, undoing while an older write is in flight must enqueue
         # the returned value too. flush_state deduplicates complete captures.
@@ -1025,9 +1093,13 @@ class LevelsPanel(QWidget):
             or self.preview_running()
         ):
             return
-        pixels = getattr(self.session, "pixels", self.session.preview)
-        region, size = self.owner.compare.preview_spec(pixels.shape)
         snapshot = self.snapshot()
+        pixels = (
+            self.session.pixels_for(snapshot)
+            if hasattr(self.session, "pixels_for")
+            else getattr(self.session, "pixels", self.session.preview)
+        )
+        region, size = self.owner.compare.preview_spec(pixels.shape)
         enabled = self.preview.isChecked()
         revision = self.preview_revision
         epoch = self.preview_epoch
@@ -1113,7 +1185,7 @@ class LevelsPanel(QWidget):
             data = export_photo(
                 item,
                 pixels,
-                session.metadata,
+                session.metadata_for(snapshot),
                 fmt,
                 policy["mode"],
                 policy["custom"],
@@ -1128,6 +1200,7 @@ class LevelsPanel(QWidget):
                 manual_brightness_contrast=snapshot[1],
                 manual_hsl=snapshot[2],
                 manual_color_balance=snapshot[3],
+                edit_base="original" if uses_original(snapshot) else "v39",
                 result_revision=int(previous.get("result_revision", 0)) + 1,
             )
             warning = ""

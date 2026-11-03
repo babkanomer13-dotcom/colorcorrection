@@ -66,7 +66,7 @@ class PreviewRenderer:
         checkpoint()
         result = pixels
         if enabled:
-            levels, tone, hsl, balance = snapshot
+            levels, tone, hsl, balance = snapshot[:4]
             lut = combined_lut(levels, tone, balance)
             key = lut.tobytes()
             if self.source is not pixels or self.lut_key != key:

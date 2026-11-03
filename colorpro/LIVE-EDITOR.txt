@@ -39,6 +39,20 @@ now bounded and does not render a complete export merely to open a small preview
 
 Preview and comparison
 ----------------------
+From 1.10.0, a per-photo report displays the actual V39 decision: ordered auto
+tools, composite RGB input/output endpoints and centigamma converted to gamma.
+Missing legacy decisions are labelled unavailable, never guessed from pixels.
+Manual edits and bypassed V39 are labelled separately from the historical decision.
+
+Reset to original is a separate undoable action for the active photo. It lazily
+decodes the original InputItem (including ZIP members) off the GUI thread, keeps
+the immutable V39 base, and resets all manual tools. A source-base marker travels
+with snapshots, undo/redo, metadata and committed results; 4-field legacy snapshots
+still read unchanged. Source mode uses original pixels for preview, histogram,
+pickers, automatic tools and full export. Failed decoding leaves prior edits intact.
+Navigation/close wait for loading and the existing save barrier. Reset never writes
+the source or immediately exports a duplicate; unchanged repeat resets are no-ops.
+
 From 1.9.1, drag and idle use the same display-resolution input. The previous
 640 px drag proxy and 120 ms refinement caused visible blur/sharpness jumps.
 The visible crop is now taken from native pixels and downsampled only to its

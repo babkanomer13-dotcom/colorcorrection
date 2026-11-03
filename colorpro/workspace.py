@@ -76,7 +76,9 @@ class Workspace:
         # Fail closed if the source was replaced while editing.
         item.unchanged()
         value = {
-            "schema": 1,
+            "schema": 2
+            if any(len(row) == 5 for row in [current, *history, *future])
+            else 1,
             "identity": identity(item),
             "base": str(Path(base).resolve()),
             "base_sha256": base_sha,
@@ -92,7 +94,7 @@ class Workspace:
         if value is None:
             return None
         if (
-            value.get("schema") != 1
+            value.get("schema") not in {1, 2}
             or value.get("identity") != identity(item)
             or (
                 not value.get("base_sha256")
@@ -122,7 +124,9 @@ class Workspace:
             ):
                 raise ValueError("Повреждена история правок")
         for snapshot in [value["current"], *value["history"], *value["future"]]:
-            if not isinstance(snapshot, (tuple, list)) or len(snapshot) != 4:
+            if not isinstance(snapshot, (tuple, list)) or not (
+                len(snapshot) == 4 or (len(snapshot) == 5 and snapshot[4] == "original")
+            ):
                 raise ValueError("Повреждены параметры коррекции")
             levels_lut(snapshot[0])
             validate_tone(snapshot[1])
