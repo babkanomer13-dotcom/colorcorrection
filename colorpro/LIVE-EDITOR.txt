@@ -39,10 +39,8 @@ now bounded and does not render a complete export merely to open a small preview
 
 Preview and comparison
 ----------------------
-From 1.10.0, a per-photo report displays the actual V39 decision: ordered auto
-tools, composite RGB input/output endpoints and centigamma converted to gamma.
-Missing legacy decisions are labelled unavailable, never guessed from pixels.
-Manual edits and bypassed V39 are labelled separately from the historical decision.
+From 1.10.1, the per-photo V39 report is removed from the comparison workspace.
+Recorded processing decisions remain available internally for state recovery.
 
 Reset to original is a separate undoable action for the active photo. It lazily
 decodes the original InputItem (including ZIP members) off the GUI thread, keeps

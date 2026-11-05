@@ -5,7 +5,6 @@ from pathlib import Path
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -18,7 +17,6 @@ from colorpro.editor_render import rgb_image
 from colorpro.files import collect_inputs, preview_bytes, read_image
 from colorpro.levels import uses_original
 from colorpro.levels_panel import LevelsPanel
-from colorpro.photo_report import processing_report
 from colorpro.widgets import combo_box, navigation_icon
 
 
@@ -590,25 +588,6 @@ class ComparePage(QWidget):
         self.compare_toggle.clicked.connect(lambda: self.view.toggle_original())
         self.tools.addWidget(self.compare_toggle)
         layout.addLayout(self.tools)
-        self.report_card = QFrame()
-        self.report_card.setObjectName("notice")
-        report_layout = QVBoxLayout(self.report_card)
-        report_layout.setContentsMargins(12, 8, 12, 8)
-        report_layout.setSpacing(2)
-        self.report_title = QLabel()
-        self.report_title.setObjectName("section")
-        self.report_detail = QLabel()
-        self.report_note = QLabel()
-        for label in (self.report_title, self.report_detail, self.report_note):
-            label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setWordWrap(True)
-            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            report_layout.addWidget(label)
-        self.report_detail.setObjectName("muted")
-        self.report_note.setObjectName("muted")
-        self.report_note.setMinimumHeight(16)
-        self.report_card.hide()
-        layout.addWidget(self.report_card)
         self.view = CompareView()
         self.view.native_requested.connect(owner.request_native_detail)
         mode = str(owner.settings.value("comparison_mode", "2"))
@@ -739,7 +718,6 @@ class ComparePage(QWidget):
             )
             or self.levels_button.isEnabled()
         )
-        self.sync_report()
         for control in self.tool_buttons.values():
             control.setEnabled(
                 (
@@ -755,25 +733,3 @@ class ComparePage(QWidget):
                 self.open_file,
             ):
                 control.setEnabled(False)
-
-    def sync_report(self):
-        editor = self.editor
-        index = editor.index if editor.active else self.owner.table.currentIndex().row()
-        record = self.owner.queue.results.get(index, {})
-        self.report_card.setVisible(bool(record.get("output")))
-        if not record.get("output"):
-            return
-        snapshot = (
-            editor.snapshot()
-            if editor.active and editor.session is not None
-            else editor.record_snapshot(record)
-        )
-        text = processing_report(
-            record, uses_original(snapshot), snapshot[:4] != editor.record_snapshot({})
-        )
-        for label, value in zip(
-            (self.report_title, self.report_detail, self.report_note), text
-        ):
-            if label.text() != value:
-                label.setText(value)
-        # Reserve the status line so the photo does not resize on the first edit.

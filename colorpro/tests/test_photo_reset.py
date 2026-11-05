@@ -1,4 +1,4 @@
-"""Recorded decisions and undoable source reset with real encoded files."""
+"""Undoable source reset with real encoded files."""
 # ruff: noqa: F811 -- imported pytest fixture is injected by name
 
 import json
@@ -15,7 +15,6 @@ from colorpro import exporting
 from colorpro.editor_render import rgb_image
 from colorpro.files import collect_inputs, read_image
 from colorpro.levels import LevelsSession, uses_original
-from colorpro.photo_report import TOOLS, processing_report
 from colorpro.preview import PreviewWorker
 from colorpro.tests.test_editor_persistence import (  # noqa: F401
     begin,
@@ -26,31 +25,6 @@ from colorpro.tests.test_editor_persistence import (  # noqa: F401
 )
 from colorpro.ui import Window
 from colorpro.workspace import Workspace, atomic_json
-
-
-@pytest.mark.parametrize("tool", list(TOOLS))
-def test_report_uses_recorded_tool_and_physical_levels(tool):
-    record = {"decision": {"tool": tool, "levels": [7, 244, 137, 3, 250]}}
-    title, detail, note = processing_report(record)
-    assert title == "V39 · " + TOOLS[tool]
-    assert detail == "Вход: 7–244 · Гамма: 1,37 · Выход: 3–250 · Весь кадр"
-    assert not note
-    assert "отключена" in processing_report(record, original=True)[2]
-    assert "ручные правки исходника" in processing_report(record, True, True)[2]
-    assert "Поверх" in processing_report(record, False, True)[2]
-
-
-def test_missing_or_malformed_report_never_invents_parameters():
-    for record in ({}, {"decision": None}, {"decision": {"tool": "unknown"}}):
-        assert "не сохранены" in processing_report(record)[1]
-    for levels in (None, [0, 255, 1.2, 0, 255], [0, 255, 100], [255, 0, 100, 0, 255]):
-        assert (
-            "недоступны"
-            in processing_report(
-                {"decision": {"tool": "auto_color", "levels": levels}}
-            )[1]
-        )
-    assert "не изменили" in processing_report({"reason": "no_pixel_changes"})[2]
 
 
 def ready_original(app, editor):
@@ -94,9 +68,6 @@ def test_reset_removes_v39_and_manual_changes_only_from_current_frame(
     source, _, _ = read_image(owner.queue.items[0])
     assert np.array_equal(editor.session.render(editor.snapshot()), source)
     assert owner.compare.after.toImage() == QPixmap.fromImage(rgb_image(source)).toImage()
-    assert "отключена" in owner.review.report_note.text()
-    assert "Автоцвет" in owner.review.report_title.text()
-    assert "1,23" in owner.review.report_detail.text()
     assert not writes  # Reset obeys the same deferred save boundary as sliders.
     assert all(
         Path(owner.queue.results[i]["output"]).read_bytes() == raw
@@ -117,8 +88,6 @@ def test_reset_removes_v39_and_manual_changes_only_from_current_frame(
         ),
     )
     assert len(writes) == 1 and not editor.use_original
-    assert "Автотон" in owner.review.report_title.text()
-    assert "отключена" not in owner.review.report_note.text()
     record = owner.queue.results[0]
     assert (
         record["edit_base"] == "original" and record["decision"]["tool"] == "auto_color"

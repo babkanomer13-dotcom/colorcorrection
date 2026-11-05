@@ -32,7 +32,6 @@ APP = [
     "exporting.py",
     "batch.py",
     "preview.py",
-    "photo_report.py",
     "ui.py",
     "widgets.py",
     "design.py",

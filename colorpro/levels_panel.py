@@ -1060,7 +1060,6 @@ class LevelsPanel(QWidget):
         if self.snapshot() != self.saved_snapshot:
             self.dirty = True
         self.update_save_button()
-        self.owner.review.sync_report()
         # History can change even when Undo returns to the last saved pixels.
         # In particular, undoing while an older write is in flight must enqueue
         # the returned value too. flush_state deduplicates complete captures.
