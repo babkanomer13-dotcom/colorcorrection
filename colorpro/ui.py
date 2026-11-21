@@ -645,11 +645,7 @@ class Window(QMainWindow):
         self.queue.rowsInserted.connect(lambda *args: self.queue_timer.start())
         self.queue.modelReset.connect(lambda *args: self.queue_timer.start())
         self.queue.dataChanged.connect(
-            lambda first, last, *args: (
-                self.refresh_start_button()
-                if first.column() <= 3 <= last.column()
-                else None
-            )
+            lambda *args: self.refresh_start_button()
         )
         QTimer.singleShot(0, self.restore_workspace)
         QTimer.singleShot(1200, self.auto_check_updates)
@@ -1304,10 +1300,20 @@ class Window(QMainWindow):
         ]
 
     def refresh_start_button(self):
+        selected = bool(self.queue.checked)
         self.start.setText(
-            "Перейти"
+            "Обработать выбранные"
+            if selected
+            else "Обработать повторно"
             if self.queue.items and not self.pending_indices()
             else "Начать цветокоррекцию"
+        )
+        self.start.setToolTip(
+            "Обработать отмеченные фотографии, включая уже готовые."
+            if selected
+            else "Повторить обработку выделенных фотографий из исходников."
+            if self.queue.items and not self.pending_indices()
+            else "Обработать оставшиеся фотографии."
         )
 
     def update_summary(self):
@@ -1413,11 +1419,30 @@ class Window(QMainWindow):
             self.refresh_start_button()
 
     def start_batch(self):
+        checked = [
+            i
+            for i, item in enumerate(self.queue.items)
+            if item.key in self.queue.checked
+        ]
+        indices = checked or self.pending_indices()
+        if not indices:
+            indices = sorted(
+                i.row() for i in self.table.selectionModel().selectedRows()
+            )
+        self.run_indices(indices or list(range(len(self.queue.items))))
+
+    def reprocess_current(self):
+        index = self.table.currentIndex().row()
+        if 0 <= index < len(self.queue.items):
+            self.run_indices([index])
+
+    def run_indices(self, indices):
+        if self.review.editor.active:
+            self.review.editor.leave(lambda: self.run_indices(indices))
+            return
         if self.busy() or not self.queue.items:
             return
-        indices = self.pending_indices()
         if not indices:
-            self.open_comparison()
             return
         self.normalize_output_mode()
         self.settings.setValue("output", self.output.text())
@@ -1481,7 +1506,10 @@ class Window(QMainWindow):
         elif kind == "resumed":
             self.stage.setText("Продолжаем обработку…")
         elif kind == "start":
-            self.queue.update(event["index"], {"status": "running"})
+            self.queue.update(
+                event["index"],
+                dict(self.queue.results.get(event["index"], {}), status="running"),
+            )
             self.update_summary()
             self.stage.setText(
                 f"{event['index'] + 1} / {len(self.queue.items)} · {event['text']}"
@@ -1534,7 +1562,7 @@ class Window(QMainWindow):
                     ],
                 )
             self.last_report = report
-            for index in range(len(self.queue.items)):
+            for index in self.batch_indices:
                 if self.queue.results.get(index, {}).get("status", "queued") in {
                     "queued",
                     "running",

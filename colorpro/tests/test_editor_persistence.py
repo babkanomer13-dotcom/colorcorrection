@@ -317,8 +317,8 @@ def test_close_reopen_restores_queue_and_edit(app, desktop):
 def test_completed_queue_opens_editor_without_reprocessing(app, desktop):
     assert desktop.pending_indices() == []
     desktop.show_page(desktop.PHOTOS)
-    assert desktop.start.text() == "Перейти"
-    desktop.start_batch()
+    assert desktop.start.text() == "Обработать повторно"
+    desktop.open_comparison()
     assert desktop.pages.currentIndex() == desktop.COMPARE and desktop.worker is None
     desktop.queue.update(1, {"status": "error"})
     desktop.update_queue()

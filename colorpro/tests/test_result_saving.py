@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PIL import Image
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtTest import QTest
 
 from colorpro import exporting
 from colorpro.batch import Control, run_batch
@@ -335,6 +336,96 @@ def test_destinations_and_repeated_batch_reuse_output(tmp_path, chosen):
     assert Path(first["records"][0]["output"]) == root / "photo_СС.png"
     assert first["records"][0]["output"] == second["records"][0]["output"]
     assert list(root.rglob("*.png")) == [root / "photo_СС.png"]
+
+
+def test_repeat_current_waits_for_edits_and_replaces_only_current_photo(app, processed):
+    window, writes = processed
+    editor = begin(app, window)
+    old = dict(window.queue.results[0])
+    other = [dict(window.queue.results[i]) for i in (1, 2)]
+    hashes = [digest(record["output"]) for record in other]
+    editor.change("gamma", 130)
+    QTest.mouseClick(window.review.reprocess_button, Qt.MouseButton.LeftButton)
+    pump(
+        app,
+        lambda: (
+            window.queue.results[0].get("processing_id") != old["processing_id"]
+            and editor.active
+            and editor.session is not None
+            and not editor.running()
+        ),
+    )
+    assert not window.errors
+    assert window.queue.results[0]["output"] == old["output"]
+    assert window.last_report["total"] == 1
+    assert editor.settings[0]["gamma"] == 1.0
+    assert not editor.history and not editor.export_dirty()
+    assert [window.queue.results[i] for i in (1, 2)] == other
+    assert [digest(record["output"]) for record in other] == hashes
+    assert len(list(Path(old["output"]).parent.glob("*.png"))) == 3
+    # One departure save and one repeated V39 export, with no navigation resave.
+    assert len(writes) == 2
+    select(app, window, 1)
+    editor = select(app, window, 0)
+    assert editor.settings[0]["gamma"] == 1.0 and len(writes) == 2
+    assert window.workspace.load_queue()[1][0]["processing_id"] != old["processing_id"]
+
+
+@pytest.mark.parametrize("checked", [False, True])
+def test_processed_photo_can_repeat_from_queue(app, processed, checked):
+    window, _ = processed
+    window.show_page(window.PHOTOS)
+    pump(app, lambda: not window.busy())
+    old = dict(window.queue.results[1])
+    if checked:
+        window.queue.update(2, {"status": "queued"})
+        window.queue.setData(
+            window.queue.index(1, 0),
+            Qt.CheckState.Checked,
+            Qt.ItemDataRole.CheckStateRole,
+        )
+        assert window.start.text() == "Обработать выбранные"
+    else:
+        window.table.selectRow(1)
+        assert window.start.text() == "Обработать повторно"
+    untouched = dict(window.queue.results[2])
+    window.start.click()
+    pump(app, lambda: not window.busy() and window.last_report is not None)
+    assert window.last_report["total"] == 1
+    assert window.queue.results[1]["processing_id"] != old["processing_id"]
+    assert window.queue.results[2] == untouched
+    assert window.queue.results[1]["output"] == old["output"]
+
+
+def test_failed_reprocessing_keeps_result_and_edit_session(app, processed):
+    window, _ = processed
+    editor = begin(app, window)
+    editor.change("gamma", 130)
+    editor.save_result()
+    pump(app, lambda: not editor.running() and not editor.export_dirty())
+    old = dict(window.queue.results[0])
+    before = digest(old["output"])
+
+    class FailedEngine(FakeEngine):
+        def process(self, pixels):
+            raise ValueError("retry failure")
+
+    window.engine_factory = FailedEngine
+    window.review.reprocess_button.click()
+    pump(
+        app,
+        lambda: (
+            window.last_report is not None
+            and window.last_report["errors"] == 1
+            and editor.active
+            and editor.session is not None
+            and not editor.running()
+        ),
+    )
+    record = window.queue.results[0]
+    assert record["processing_id"] == old["processing_id"]
+    assert record["output"] == old["output"] and digest(old["output"]) == before
+    assert editor.settings[0]["gamma"] == 1.3 and not editor.export_dirty()
 
 
 def test_destination_settings_choose_cancel_empty_and_restart(
