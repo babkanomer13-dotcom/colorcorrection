@@ -134,7 +134,8 @@ def test_direct_open_focus_and_numeric_switch(app, workspace, key, section, cont
     QTest.keyClick(field, Qt.Key.Key_L, CTRL)
     assert editor.controls["input_black"][0].hasFocus()
     assert editor.levels_section.body.isVisible()
-    assert getattr(editor, section).body.isVisible()
+    assert not editor.hsl_section.body.isVisible()
+    assert not editor.balance_section.body.isVisible()
     assert {
         "levels": editor.settings[0]["input_black"],
         "hsl": editor.hsl["hue"],
@@ -241,7 +242,6 @@ def test_russian_physical_tool_shortcuts_and_recording_guard(app, workspace):
     # Reopening now preserves expanded groups; establish a closed HSL group
     # explicitly before testing that plain typing cannot activate it.
     editor.activate_tool("levels")
-    editor.hsl_section.toggle.setChecked(False)
     field = editor.controls["gamma"][0]
     field.setFocus()
     QTest.keyClick(field, Qt.Key.Key_U)
@@ -287,7 +287,6 @@ def test_busy_editor_cannot_start_second_operation(app, workspace, monkeypatch):
     owner, editor = workspace, workspace.review.editor
     QTest.keyClick(owner.compare, Qt.Key.Key_L, CTRL)
     ready(app, editor)
-    editor.hsl_section.toggle.setChecked(False)
     calculate = auto_module.auto_settings
     entered, release = threading.Event(), threading.Event()
 
@@ -310,31 +309,3 @@ def test_busy_editor_cannot_start_second_operation(app, workspace, monkeypatch):
         release.set()
         pump(app, lambda: not editor.running())
         app.processEvents()
-
-
-@pytest.mark.parametrize("action", ["auto_color", "auto_tone", "auto_contrast"])
-@pytest.mark.parametrize("via_keyboard", [False, True])
-def test_auto_commands_preserve_expanded_sections(app, workspace, action, via_keyboard):
-    from PySide6.QtGui import QKeySequence
-
-    owner, editor = workspace, workspace.review.editor
-    editor.begin()
-    ready(app, editor)
-    sections = [
-        editor.levels_section,
-        editor.tone_section,
-        editor.hsl_section,
-        editor.balance_section,
-    ]
-    expanded = [False, True, True, True]
-    for section, value in zip(sections, expanded):
-        section.toggle.setChecked(value)
-    owner.review.panel_toggle.setChecked(True)
-    owner.review.toggle_parameters()
-    if via_keyboard:
-        QTest.keySequence(owner.compare, QKeySequence(owner.shortcuts.bindings[action]))
-    else:
-        QTest.mouseClick(owner.review.tool_buttons[action], Qt.MouseButton.LeftButton)
-    pump(app, lambda: not editor.running() and bool(editor.history))
-    assert editor.isVisible() and owner.review.panel_toggle.isChecked()
-    assert [section.toggle.isChecked() for section in sections] == expanded

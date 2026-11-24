@@ -8,7 +8,6 @@ import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime
-from pathlib import Path
 
 from colorpro import __version__
 from colorpro.files import output_path, preview_bytes, read_image, save_result
@@ -109,13 +108,7 @@ def run_batch(
             emit(dict(type="start", index=index, text=item.label))
             step = time.monotonic()
             record = dict(index=index, input=asdict(item), name=item.label)
-            previous = None
             try:
-                if export_policy:
-                    from colorpro.workspace import Workspace
-
-                    workspace = Workspace(export_policy["workspace"])
-                    previous = workspace.processed_record(item)
                 source, metadata, source_sha = read_image(item)
                 if metadata.get("container_note"):
                     record["container_note"] = metadata["container_note"]
@@ -135,32 +128,25 @@ def run_batch(
                 )
                 if export_policy:
                     from colorpro.exporting import export_photo
+                    from colorpro.workspace import Workspace
 
+                    workspace = Workspace(export_policy["workspace"])
+                    previous = workspace.processed_record(item)
                     record["base_output"] = str(result)
-                    record["processing_id"] = folder.name
                     record["result_revision"] = (
                         int((previous or {}).get("result_revision", 0)) + 1
                     )
-                    export_format = fmt
-                    if previous and previous.get("output"):
-                        export_format = (
-                            "JPEG"
-                            if Path(previous["output"]).suffix.lower()
-                            in {".jpg", ".jpeg"}
-                            else "PNG"
-                        )
                     record.update(
                         export_photo(
                             item,
                             pixels,
                             metadata,
-                            export_format,
+                            fmt,
                             export_policy["mode"],
                             export_policy["custom"],
                             export_policy["protected"],
                             previous=previous,
                             registry=workspace,
-                            preserve_location=True,
                         )
                     )
                 # UI receives bounded previews; no full-batch decoded images remain in RAM.
@@ -174,9 +160,6 @@ def run_batch(
                 )
                 del source, pixels
             except Exception as error:
-                if previous and previous.get("output"):
-                    # Keep the last usable result and edit session on retry errors.
-                    record = dict(previous, index=index)
                 record.update(
                     status="error",
                     reason=str(error),

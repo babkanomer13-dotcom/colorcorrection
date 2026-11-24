@@ -583,13 +583,6 @@ class ComparePage(QWidget):
             self.tools.addWidget(control)
             self.tool_buttons[action] = control
         self.tools.addStretch()
-        self.reprocess_button = QPushButton("Обработать повторно")
-        self.reprocess_button.setToolTip(
-            "Повторить V39 из исходника для текущего фото. "
-            "Ручные правки сбросятся; результат обновится в том же файле."
-        )
-        self.reprocess_button.clicked.connect(owner.reprocess_current)
-        self.tools.addWidget(self.reprocess_button)
         self.compare_toggle = QPushButton("До / после")
         self.compare_toggle.setCheckable(True)
         self.compare_toggle.clicked.connect(lambda: self.view.toggle_original())
@@ -716,19 +709,6 @@ class ComparePage(QWidget):
         loading = bool(owner.preview_loader and owner.preview_loader.isRunning())
         output = owner.queue.results.get(index, {}).get("output")
         self.levels_button.setEnabled(bool(output) and not owner.busy() and not loading)
-        self.reprocess_button.setEnabled(
-            bool(output)
-            and not loading
-            and (
-                not owner.busy()
-                or (
-                    editing
-                    and self.editor.controls_enabled
-                    and not self.editor.running()
-                    and self.editor.departure is None
-                )
-            )
-        )
         self.original_button.setEnabled(
             (
                 editing

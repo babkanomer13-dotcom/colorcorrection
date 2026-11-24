@@ -72,17 +72,7 @@ class Workspace:
             if source.read_bytes() != destination.read_bytes():
                 raise OSError("Не удалось сохранить резервную копию сессии")
 
-    def save_edit(
-        self,
-        item,
-        base,
-        current,
-        history,
-        future,
-        view=None,
-        base_sha=None,
-        processing_id=None,
-    ):
+    def save_edit(self, item, base, current, history, future, view=None, base_sha=None):
         # Fail closed if the source was replaced while editing.
         item.unchanged()
         value = {
@@ -92,7 +82,6 @@ class Workspace:
             "identity": identity(item),
             "base": str(Path(base).resolve()),
             "base_sha256": base_sha,
-            "processing_id": processing_id,
             "current": current,
             "history": history[-HISTORY_LIMIT:],
             "future": future[-HISTORY_LIMIT:],
@@ -100,13 +89,9 @@ class Workspace:
         }
         atomic_json(self.edit_path(item), value)
 
-    def load_edit(self, item, base, base_sha=None, processing_id=None):
+    def load_edit(self, item, base, base_sha=None):
         value = read_json(self.edit_path(item), 1024**2)
         if value is None:
-            return None
-        # A successful new V39 run starts a new edit session, even when the
-        # resulting base is identical. Failed/cancelled runs keep the old ID.
-        if processing_id is not None and value.get("processing_id") != processing_id:
             return None
         if (
             value.get("schema") not in {1, 2}

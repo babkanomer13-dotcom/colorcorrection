@@ -1,5 +1,5 @@
 #ifndef ProductVersion
-#define ProductVersion "1.10.2"
+#define ProductVersion "1.10.3"
 #endif
 #ifdef Legacy
   #define ProductName "ColorPro Win7"

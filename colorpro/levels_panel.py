@@ -489,7 +489,6 @@ class LevelsPanel(QWidget):
                 ],
             },
             "base_sha": self.session.sha,
-            "processing_id": self.processing_id,
         }
         if value != self.save_requested or self.save_error:
             self.save_revision += 1
@@ -630,12 +629,7 @@ class LevelsPanel(QWidget):
             )
             return
         auto_modes = {"auto_color": 0, "auto_tone": 1, "auto_contrast": 2}
-        if name in auto_modes:
-            # One-shot corrections must not change the user's panel layout.
-            self.auto_mode.setCurrentIndex(auto_modes[name])
-            self.auto_levels()
-            return
-        tool = name
+        tool = "levels" if name in auto_modes else name
         sections = {
             "levels": (self.levels_section, self.controls["input_black"][0]),
             "tone": (
@@ -654,10 +648,15 @@ class LevelsPanel(QWidget):
         self.owner.settings.setValue("parameters_visible", True)
         self.owner.review.highlight_tool(tool)
         self.owner.settings.setValue("last_tool", tool)
-        section.toggle.setChecked(True)
+        for candidate, _ in sections.values():
+            if candidate is not None:
+                candidate.toggle.setChecked(candidate is section)
         section.reveal()
         field.setFocus(Qt.FocusReason.ShortcutFocusReason)
         field.selectAll()
+        if name in auto_modes:
+            self.auto_mode.setCurrentIndex(auto_modes[name])
+            self.auto_levels()
 
     def refresh_shortcut_hints(self, manager):
         for section, action in (
@@ -719,7 +718,6 @@ class LevelsPanel(QWidget):
         if not record.get("output"):
             return
         self.exported_snapshot = self.record_snapshot(record)
-        self.processing_id = record.get("processing_id")
         owner.face_choice.setCurrentIndex(0)
         self.active = True
         owner.edit_on_selection = True
@@ -748,9 +746,7 @@ class LevelsPanel(QWidget):
 
         def load():
             session = LevelsSession(base, item)
-            saved = owner.workspace.load_edit(
-                item, base, session.sha, self.processing_id
-            )
+            saved = owner.workspace.load_edit(item, base, session.sha)
             snapshots = (
                 [saved["current"], *saved["history"], *saved["future"]]
                 if saved
